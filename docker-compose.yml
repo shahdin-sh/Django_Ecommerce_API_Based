@@ -3,7 +3,7 @@ version: '3.9'
 services:
   web:
     build: .
-    command: python /code/manage.py runserver 0.0.0.0:8000
+    command: python /code/manage.py runserver 0.0.0.0:8000 # python manage.py runserver 0.0.0.0:8000
     volumes:
       - .:/code
     ports:
@@ -12,4 +12,6 @@ services:
   db:
     image: postgres:14
     environment:
-      - "POSTGRES_HOST_AUTH_METHOD=trust"
+      POSTGRES_DB: 'postgres2'
+      POSTGRES_USER: 'postgres2'
+      POSTGRES_PASSWORD: 'mobina45'
