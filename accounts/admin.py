@@ -21,6 +21,7 @@ class CustomUserAdmin(UserAdmin):
     )
 
     list_display = ['username', 'email', 'first_name', 'last_name', 'is_staff', 'get_group']
+    list_per_page = 10
 
     @admin.display(description='groups')
     def get_group(self, obj):
