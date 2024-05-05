@@ -1,4 +1,4 @@
-from django.db.models import Count
+from django.db.models import Count, Prefetch
 from django.http import HttpResponse
 from django.shortcuts import render, get_object_or_404
 
@@ -9,15 +9,17 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 
-from .models import Product, Category
-from .serializers import ProductSerializer, CategorySerializer
+from .models import Product, Category, Comment
+from .serializers import ProductSerializer, CategorySerializer, CommentSerializer
 
 # comply query optimization 
 
 # product views
 # ModelViewSet contains Creat, Retrieve, Update, Destroy and List model mixins
 class ProductViewSet(ModelViewSet):
-    queryset =  Product.objects.select_related('category').all().order_by('-datetime_created')
+    queryset =  Product.objects.prefetch_related('comments').select_related('category').annotate(
+        comments_count=Count('comments')
+    ).order_by('-datetime_created').all()
     serializer_class = ProductSerializer
     lookup_field = 'slug'
 
@@ -46,3 +48,19 @@ class CategoryViewSet(ModelViewSet):
         
         category.delete()
         return HttpResponse(status=status.HTTP_404_NOT_FOUND)
+
+
+# comment views
+class CommentViewSet(ModelViewSet):
+
+    serializer_class = CommentSerializer
+
+    def get_queryset(self):
+        return Comment.objects.select_related('product').filter(
+            product__slug=self.kwargs['product_slug']).order_by('-datetime_created')
+    
+    def get_serializer_context(self):
+        context = {
+            'product' : Product.objects.get(slug=self.kwargs['product_slug'])
+        }
+        return context 
