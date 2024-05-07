@@ -35,10 +35,11 @@ class CategorySerializer(serializers.ModelSerializer):
     
 
 class CommentSerializer(serializers.ModelSerializer):
+
     class Meta:
         model = Comment
-        fields = ['name', 'body']
-    
+        fields = ['name', 'body', 'datetime_created']
+
     def create(self, validated_data):
         product_id = self.context['product'].id
         return Comment.objects.create(product_id=product_id, **validated_data)
@@ -55,7 +56,7 @@ class ProductSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Product
-        fields = ['title', 'price', 'category', 'inventory', 'total_price', 'num_of_comments', 'comments', 'detail']
+        fields = ['title', 'price', 'category', 'inventory', 'total_price', 'num_of_comments', 'detail', 'comments']
 
     DOLLAR_SIGN = '$'
 

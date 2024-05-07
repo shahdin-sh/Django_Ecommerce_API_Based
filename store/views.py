@@ -8,6 +8,7 @@ from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIV
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
+from django_filters.rest_framework import DjangoFilterBackend
 
 from .models import Product, Category, Comment
 from .serializers import ProductSerializer, CategorySerializer, CommentSerializer
@@ -17,9 +18,24 @@ from .serializers import ProductSerializer, CategorySerializer, CommentSerialize
 # product views
 # ModelViewSet contains Creat, Retrieve, Update, Destroy and List model mixins
 class ProductViewSet(ModelViewSet):
-    queryset =  Product.objects.prefetch_related('comments').select_related('category').annotate(
+
+    def get_queryset(self):
+        queryset = Product.objects.prefetch_related('comments').select_related('category').annotate(
         comments_count=Count('comments')
-    ).order_by('-datetime_created').all()
+        ).order_by('-datetime_created').all()
+
+        # url parameters
+        category_slug_parameters = self.request.query_params.get('category_slug')
+        lower_inventory_count_parameters  = self.request.query_params.get('lt')
+        upper_inventory_count_parameters  = self.request.query_params.get('ut')
+
+        if category_slug_parameters is not None:
+            queryset = queryset.filter(category__slug=category_slug_parameters).all()
+        if lower_inventory_count_parameters and upper_inventory_count_parameters is not None:
+            queryset = queryset.filter(inventory__range=[upper_inventory_count_parameters , lower_inventory_count_parameters])
+        
+        return queryset
+    
     serializer_class = ProductSerializer
     lookup_field = 'slug'
 
@@ -34,10 +50,15 @@ class ProductViewSet(ModelViewSet):
 
 # category views
 class CategoryViewSet(ModelViewSet):
+
     queryset = Category.objects.all().annotate(
             # with annotate method, products_count is known as a Category field when this view is called.
             products_count = Count('products')
         )
+    
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields  = ['title']
+
     serializer_class = CategorySerializer
     lookup_field = 'slug'
 
@@ -52,6 +73,9 @@ class CategoryViewSet(ModelViewSet):
 
 # comment views
 class CommentViewSet(ModelViewSet):
+
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['datetime_created']
 
     serializer_class = CommentSerializer
 
