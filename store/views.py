@@ -1,3 +1,4 @@
+from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Count, Prefetch
 from django.http import HttpResponse
 from django.shortcuts import render, get_object_or_404
@@ -8,8 +9,9 @@ from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIV
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
-from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.filters import OrderingFilter, SearchFilter
 
+from .filters import ProductFilter
 from .models import Product, Category, Comment
 from .serializers import ProductSerializer, CategorySerializer, CommentSerializer
 
@@ -19,30 +21,26 @@ from .serializers import ProductSerializer, CategorySerializer, CommentSerialize
 # ModelViewSet contains Creat, Retrieve, Update, Destroy and List model mixins
 class ProductViewSet(ModelViewSet):
 
-    def get_queryset(self):
-        queryset = Product.objects.prefetch_related('comments').select_related('category').annotate(
-        comments_count=Count('comments')
-        ).order_by('-datetime_created').all()
+    filter_backends = [SearchFilter, OrderingFilter , DjangoFilterBackend]
+    filterset_class = ProductFilter
+    ordering_fields = ['name', 'inventory', 'unit_price']
+    search_fields = ['name', 'category__title']
 
-        # url parameters
-        category_slug_parameters = self.request.query_params.get('category_slug')
-        lower_inventory_count_parameters  = self.request.query_params.get('lt')
-        upper_inventory_count_parameters  = self.request.query_params.get('ut')
-
-        if category_slug_parameters is not None:
-            queryset = queryset.filter(category__slug=category_slug_parameters).all()
-        if lower_inventory_count_parameters and upper_inventory_count_parameters is not None:
-            queryset = queryset.filter(inventory__range=[upper_inventory_count_parameters , lower_inventory_count_parameters])
-        
-        return queryset
-    
     serializer_class = ProductSerializer
     lookup_field = 'slug'
 
-    def delete(self, request, slug):
+    queryset = Product.objects.prefetch_related('comments').select_related('category').annotate(
+        comments_count=Count('comments')
+        ).all()
+
+
+    def destroy(self, request, slug):
         product = get_object_or_404(Product.objects.select_related('category').all(), slug=slug)
         if product.order_items.count() > 0:
-            return Response(f'{product.name} referenced through protected foreign key: OrderItem', status=status.HTTP_405_METHOD_NOT_ALLOWED)
+            return Response(
+                f'{product.name} referenced through protected foreign key: {[orderitem for orderitem in product.order_items.all()]}', 
+                status=status.HTTP_405_METHOD_NOT_ALLOWED
+            )
 
         product.delete()
         return Response(status=status.HTTP_404_NOT_FOUND)
@@ -50,6 +48,9 @@ class ProductViewSet(ModelViewSet):
 
 # category views
 class CategoryViewSet(ModelViewSet):
+
+    filter_backend = [SearchFilter]
+    search_fields = ['title']
 
     queryset = Category.objects.all().annotate(
             # with annotate method, products_count is known as a Category field when this view is called.
@@ -65,7 +66,10 @@ class CategoryViewSet(ModelViewSet):
     def destroy(self, request, slug):
         category = get_object_or_404(Category.objects.all().annotate(products_count = Count('products')), slug=slug)
         if category.products.count() > 0:
-            return Response(f'{category.title} referenced through protected foreign key: Product.', status=status.HTTP_405_METHOD_NOT_ALLOWED)
+            return Response(
+                f'{category.title} referenced through protected foreign key:{[product for product in category.products.all()]}', 
+                status=status.HTTP_405_METHOD_NOT_ALLOWED
+            )
         
         category.delete()
         return HttpResponse(status=status.HTTP_404_NOT_FOUND)
@@ -81,7 +85,7 @@ class CommentViewSet(ModelViewSet):
 
     def get_queryset(self):
         return Comment.objects.select_related('product').filter(
-            product__slug=self.kwargs['product_slug']).order_by('-datetime_created')
+            product__slug=self.kwargs['product_slug']).all()
     
     def get_serializer_context(self):
         context = {
