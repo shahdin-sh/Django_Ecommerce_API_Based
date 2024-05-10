@@ -11,6 +11,7 @@ from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.filters import OrderingFilter, SearchFilter
 
+from .paginations import StandardResultSetPagination, LargeResultSetPagination
 from .filters import ProductFilter
 from .models import Product, Category, Comment
 from .serializers import ProductSerializer, CategorySerializer, CommentSerializer
@@ -21,18 +22,19 @@ from .serializers import ProductSerializer, CategorySerializer, CommentSerialize
 # ModelViewSet contains Creat, Retrieve, Update, Destroy and List model mixins
 class ProductViewSet(ModelViewSet):
 
-    filter_backends = [SearchFilter, OrderingFilter , DjangoFilterBackend]
-    filterset_class = ProductFilter
-    ordering_fields = ['name', 'inventory', 'unit_price']
-    search_fields = ['name', 'category__title']
-
     serializer_class = ProductSerializer
     lookup_field = 'slug'
 
     queryset = Product.objects.prefetch_related('comments').select_related('category').annotate(
         comments_count=Count('comments')
         ).all()
+    
+    filter_backends = [SearchFilter, OrderingFilter , DjangoFilterBackend]
+    filterset_class = ProductFilter
+    ordering_fields = ['name', 'inventory', 'unit_price']
+    search_fields = ['name', 'category__title']
 
+    pagination_class = LargeResultSetPagination
 
     def destroy(self, request, slug):
         product = get_object_or_404(Product.objects.select_related('category').all(), slug=slug)
@@ -49,19 +51,18 @@ class ProductViewSet(ModelViewSet):
 # category views
 class CategoryViewSet(ModelViewSet):
 
-    filter_backend = [SearchFilter]
-    search_fields = ['title']
-
+    serializer_class = CategorySerializer
+    lookup_field = 'slug'
     queryset = Category.objects.all().annotate(
             # with annotate method, products_count is known as a Category field when this view is called.
             products_count = Count('products')
         )
     
-    filter_backends = [DjangoFilterBackend]
+    filter_backend = [SearchFilter, DjangoFilterBackend]
+    search_fields = ['title']
     filterset_fields  = ['title']
 
-    serializer_class = CategorySerializer
-    lookup_field = 'slug'
+    pagination_class = StandardResultSetPagination
 
     def destroy(self, request, slug):
         category = get_object_or_404(Category.objects.all().annotate(products_count = Count('products')), slug=slug)
@@ -78,9 +79,6 @@ class CategoryViewSet(ModelViewSet):
 # comment views
 class CommentViewSet(ModelViewSet):
 
-    filter_backends = [DjangoFilterBackend]
-    filterset_fields = ['datetime_created']
-
     serializer_class = CommentSerializer
 
     def get_queryset(self):
@@ -92,3 +90,9 @@ class CommentViewSet(ModelViewSet):
             'product' : Product.objects.get(slug=self.kwargs['product_slug'])
         }
         return context 
+    
+    pagination_class = StandardResultSetPagination
+
+    filter_backends = [OrderingFilter]
+    ordering_fields = ['datetime_created', 'name']
+    
