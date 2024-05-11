@@ -8,8 +8,14 @@ router = routers.DefaultRouter()
 
 router.register('products', views.ProductViewSet, basename='product') # product-list| product-detail
 router.register('categories', views.CategoryViewSet, basename='category') # category-list | category-detail
+router.register('carts', views.CartViewSet, basename='carts')
 
 product_router = routers.NestedDefaultRouter(router, 'products', lookup='product') # products/product_slug
 product_router.register('comments', views.CommentViewSet, basename='product-comments') # products/product_slug/comments/pk
 
-urlpatterns = [path('', include(router.urls)),] + product_router.urls
+cart_router = routers.NestedDefaultRouter(router, 'carts', lookup='cart') # carts/uuid 
+cart_router.register('items', views.CartItemViewSet, basename='cart-items') # carts/uuid/items/item_pk
+
+urlpatterns = [
+    path('', include(router.urls)),
+] + product_router.urls + cart_router.urls

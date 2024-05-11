@@ -8,18 +8,17 @@ from rest_framework.decorators import api_view
 from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.viewsets import ModelViewSet
+from rest_framework.viewsets import ModelViewSet, GenericViewSet
 from rest_framework.filters import OrderingFilter, SearchFilter
+from rest_framework.mixins import RetrieveModelMixin, UpdateModelMixin, DestroyModelMixin, CreateModelMixin, ListModelMixin
 
 from .paginations import StandardResultSetPagination, LargeResultSetPagination
 from .filters import ProductFilter
-from .models import Product, Category, Comment
-from .serializers import ProductSerializer, CategorySerializer, CommentSerializer
+from .models import Product, Category, Comment, Cart, CartItem
+from .serializers import ProductSerializer, CategorySerializer, CommentSerializer, CartSerializer, CartItemSerializer, AddItemtoCartSerializer
 
-# comply query optimization 
 
-# product views
-# ModelViewSet contains Creat, Retrieve, Update, Destroy and List model mixins
+# Product view
 class ProductViewSet(ModelViewSet):
 
     serializer_class = ProductSerializer
@@ -48,7 +47,7 @@ class ProductViewSet(ModelViewSet):
         return Response(status=status.HTTP_404_NOT_FOUND)
     
 
-# category views
+# Category View
 class CategoryViewSet(ModelViewSet):
 
     serializer_class = CategorySerializer
@@ -76,7 +75,7 @@ class CategoryViewSet(ModelViewSet):
         return HttpResponse(status=status.HTTP_404_NOT_FOUND)
 
 
-# comment views
+# Comment View
 class CommentViewSet(ModelViewSet):
 
     serializer_class = CommentSerializer
@@ -95,4 +94,39 @@ class CommentViewSet(ModelViewSet):
 
     filter_backends = [OrderingFilter]
     ordering_fields = ['datetime_created', 'name']
+
+
+# Cart View
+class CartViewSet(ModelViewSet):
+    serializer_class = CartSerializer
+    queryset = Cart.objects.prefetch_related(
+        Prefetch('items', queryset=CartItem.objects.select_related('product'))
+        ).all()
+    lookup_field = 'id'
+
+    pagination_class = StandardResultSetPagination
+
+    lookup_value_regex = '[0-9A-Za-z]{8}\-?[0-9A-Za-z]{4}\-?[0-9A-Za-z]{4}\-?[0-9A-Za-z]{4}\-?[0-9A-Za-z]{12}'
+
+
+class CartItemViewSet(ModelViewSet):
+    http_method_names = ['get', 'post', 'put', 'delete']
+
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return AddItemtoCartSerializer
+        
+        return CartItemSerializer
+
+
+    def get_queryset(self):
+        cart_id = self.kwargs['cart_id']
+        return CartItem.objects.select_related('cart', 'product').filter(cart__id=cart_id).all()
     
+    def get_serializer_context(self):
+        context = {
+            'cart' : Cart.objects.get(id=self.kwargs['cart_id']),
+            'request' : self.request,
+        }
+        return context
+
