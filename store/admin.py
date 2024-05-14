@@ -126,19 +126,22 @@ admin.site.register(models.Category)
 
 @admin.register(models.Customer)
 class CustomerAdmin(admin.ModelAdmin):
-    list_display = ['first_name', 'last_name', 'email', ]
+    list_display = ['first_name', 'last_name', 'email', 'phone_number']
     list_per_page = 10
     ordering = ['user__last_name', 'user__first_name', ]
     search_fields = ['user__first_name__istartswith', 'user__last_name__istartswith', ]
 
-    def first_name(self, customer):
-        return customer.user.first_name
+    def first_name(self, obj):
+        return obj.user.first_name
     
-    def last_name(self, customer):
-        return customer.user.last_name
+    def last_name(self, obj):
+        return obj.user.last_name
 
-    def email(self, customer):
-        return customer.user.email
+    def email(self, obj):
+        return obj.user.email
+    
+    def phone_number(self, obj):
+        return obj.user.phone_number
 
 
 @admin.register(models.OrderItem)
