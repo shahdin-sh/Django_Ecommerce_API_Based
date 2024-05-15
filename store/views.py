@@ -17,7 +17,6 @@ from .filters import ProductFilter
 from .models import Product, Category, Comment, Cart, CartItem
 from .serializers import ProductSerializer, CategorySerializer, CommentSerializer, CartSerializer, CartItemSerializer, AddItemtoCartSerializer
 
-
 # Product view
 class ProductViewSet(ModelViewSet):
 
