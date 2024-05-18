@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
 
+from datetime import timedelta
 from pathlib import Path
 import os
 
@@ -40,6 +41,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     # local apps
     'rest_framework',
+    'djoser',
     'accounts',
     'store',
     'debug_toolbar',
@@ -161,8 +163,27 @@ AUTH_USER_MODEL = 'accounts.CustomUser'
 # Rest Framework settings
 REST_FRAMEWORK = {
     'COERCE_DECIMAL_TO_STRING': False,
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
     # 'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.LimitOffsetPagination',
     # 'PAGE_SIZE' : 10,
+}
+
+SIMPLE_JWT = {
+    'AUTH_HEADER_TYPES': ('JWT',),
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=2),
+}
+
+DJOSER = {
+    'SET_PASSWORD_RETYPE' : True,
+    'PASSWORD_RESET_CONFIRM_URL': 'auth/users/reset_password_confirm/{uid}/{token}',
+    'SERIALIZERS': {
+        'user_create': 'accounts.serializers.DjoserCustomUserCreateSerializer',
+        'current_user': 'accounts.serializers.DjoserCustomUserSerializer',
+        'user': 'accounts.serializers.DjoserCustomUserSerializer',
+    } 
 }
 
 
@@ -176,3 +197,5 @@ INTERNAL_IPS = [
 DEBUG_TOOLBAR_CONFIG = {
     'SHOW_TOOLBAR_CALLBACK': lambda _request: DEBUG
 }
+
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
