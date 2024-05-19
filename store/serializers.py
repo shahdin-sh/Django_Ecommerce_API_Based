@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.utils.text import slugify
-from .models import Product, Category, Comment, Cart, CartItem
+from .models import Product, Category, Comment, Cart, CartItem, Customer
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -155,6 +155,7 @@ class CartItemSerializer(serializers.ModelSerializer):
             instance.save()
             return instance
 
+
 class CartSerializer(serializers.ModelSerializer):
     id = serializers.UUIDField(read_only=True)
     items = CartItemSerializer(many=True, read_only=True)
@@ -169,3 +170,10 @@ class CartSerializer(serializers.ModelSerializer):
     def get_total_price(self, obj:Cart):
         total_price = sum([item.quantity * int(item.product.unit_price) for item in obj.items.all()])
         return f'{total_price: ,} {self.DOLLAR_SIGN}'
+    
+
+class CustomerSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Customer
+        fields = ['id', 'user', 'birth_date']
+        read_only_fields = ['user']

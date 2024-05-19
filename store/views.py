@@ -4,7 +4,7 @@ from django.http import HttpResponse
 from django.shortcuts import render, get_object_or_404
 
 from rest_framework import status
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, action
 from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -14,8 +14,8 @@ from rest_framework.mixins import RetrieveModelMixin, UpdateModelMixin, DestroyM
 
 from .paginations import StandardResultSetPagination, LargeResultSetPagination
 from .filters import ProductFilter
-from .models import Product, Category, Comment, Cart, CartItem
-from .serializers import ProductSerializer, CategorySerializer, CommentSerializer, CartSerializer, CartItemSerializer, AddItemtoCartSerializer
+from .models import Product, Category, Comment, Cart, CartItem, Customer
+from .serializers import ProductSerializer, CategorySerializer, CommentSerializer, CartSerializer, CartItemSerializer, AddItemtoCartSerializer, CustomerSerializer
 
 # Product view
 class ProductViewSet(ModelViewSet):
@@ -129,3 +129,24 @@ class CartItemViewSet(ModelViewSet):
         }
         return context
 
+
+# Customer View
+class CustomerViewSet(ModelViewSet):
+    serializer_class = CustomerSerializer
+    queryset = Customer.objects.select_related('user').all()
+    
+    @action(detail=False, methods=['GET', 'PUT', 'DELETE'])
+    def me(self, request):
+        customer = Customer.objects.get(user=request.user)
+        if request.method == 'GET':
+            # no need of get_object_or_404 because of customer creation signal for newly signed up users
+            serializer = CustomerSerializer(customer)
+            return Response(serializer.data)
+        elif request.method == 'PUT':
+            serializer = CustomerSerializer(customer, request.data)
+            serializer.is_valid(raise_exception=True)
+
+            serializer.save()
+            return Response(status=status.HTTP_200_OK)
+        elif request.method == 'DELETE':
+            return Response('Each user should be a customer', status=status.HTTP_405_METHOD_NOT_ALLOWED)
