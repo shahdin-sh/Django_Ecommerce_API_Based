@@ -5,17 +5,20 @@ from django.shortcuts import render, get_object_or_404
 
 from rest_framework import status
 from rest_framework.decorators import api_view, action
+from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
+from rest_framework.mixins import RetrieveModelMixin, UpdateModelMixin, DestroyModelMixin, CreateModelMixin, ListModelMixin
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet, GenericViewSet
-from rest_framework.filters import OrderingFilter, SearchFilter
-from rest_framework.mixins import RetrieveModelMixin, UpdateModelMixin, DestroyModelMixin, CreateModelMixin, ListModelMixin
 
 from .paginations import StandardResultSetPagination, LargeResultSetPagination
 from .filters import ProductFilter
 from .models import Product, Category, Comment, Cart, CartItem, Customer
 from .serializers import ProductSerializer, CategorySerializer, CommentSerializer, CartSerializer, CartItemSerializer, AddItemtoCartSerializer, CustomerSerializer
+from .permissions import IsAdminOrReadOnly, IsProductManager, IsContentManager, IsCustomerManager, IsAdmin
+
 
 # Product view
 class ProductViewSet(ModelViewSet):
@@ -33,6 +36,8 @@ class ProductViewSet(ModelViewSet):
     search_fields = ['name', 'category__title']
 
     pagination_class = LargeResultSetPagination
+
+    permission_classes = [IsProductManager]
 
     def destroy(self, request, slug):
         product = get_object_or_404(Product.objects.select_related('category').all(), slug=slug)
@@ -62,6 +67,8 @@ class CategoryViewSet(ModelViewSet):
 
     pagination_class = StandardResultSetPagination
 
+    permission_classes = [IsProductManager]
+
     def destroy(self, request, slug):
         category = get_object_or_404(Category.objects.all().annotate(products_count = Count('products')), slug=slug)
         if category.products.count() > 0:
@@ -87,12 +94,15 @@ class CommentViewSet(ModelViewSet):
         context = {
             'product' : Product.objects.get(slug=self.kwargs['product_slug'])
         }
-        return context 
+        return context
+     
+    filter_backends = [OrderingFilter]
+    ordering_fields = ['datetime_created', 'name']
     
     pagination_class = StandardResultSetPagination
 
-    filter_backends = [OrderingFilter]
-    ordering_fields = ['datetime_created', 'name']
+    permission_classes = [IsContentManager]
+
 
 
 # Cart View
@@ -104,6 +114,8 @@ class CartViewSet(ModelViewSet):
     lookup_field = 'id'
 
     pagination_class = StandardResultSetPagination
+
+    permission_classes = [IsAdmin]
 
     lookup_value_regex = '[0-9A-Za-z]{8}\-?[0-9A-Za-z]{4}\-?[0-9A-Za-z]{4}\-?[0-9A-Za-z]{4}\-?[0-9A-Za-z]{12}'
 
@@ -117,6 +129,7 @@ class CartItemViewSet(ModelViewSet):
         
         return CartItemSerializer
 
+    permission_classes = [IsAdmin]
 
     def get_queryset(self):
         cart_id = self.kwargs['cart_id']
@@ -135,7 +148,9 @@ class CustomerViewSet(ModelViewSet):
     serializer_class = CustomerSerializer
     queryset = Customer.objects.select_related('user').all()
     
-    @action(detail=False, methods=['GET', 'PUT', 'DELETE'])
+    permission_classes = [IsCustomerManager]
+
+    @action(detail=False, methods=['GET', 'PUT', 'DELETE'], permission_classes=[IsAuthenticated])
     def me(self, request):
         customer = Customer.objects.get(user=request.user)
         if request.method == 'GET':
@@ -150,3 +165,8 @@ class CustomerViewSet(ModelViewSet):
             return Response(status=status.HTTP_200_OK)
         elif request.method == 'DELETE':
             return Response('Each user should be a customer', status=status.HTTP_405_METHOD_NOT_ALLOWED)
+    
+    @action(detail=True, methods=['GET'])
+    def send_private_email(self, request, pk):
+        target_customer = Customer.objects.get(pk=pk)
+        return Response(f'send private email to {target_customer.user.username} by {request.user.username}')
