@@ -53,10 +53,13 @@ class Customer(models.Model):
 
 
 class Address(models.Model):
-    customer = models.OneToOneField(Customer, on_delete=models.CASCADE, primary_key=True)
+    customer = models.OneToOneField(Customer, on_delete=models.CASCADE, primary_key=True, related_name='address')
     province = models.CharField(max_length=255)
     city = models.CharField(max_length=255)
     street = models.CharField(max_length=255)
+
+    def __str__(self):
+        return f'{self.city} city, {self.province} province, {self.street} street.'
 
 
 class UnpaidOrderManger(models.Manager):

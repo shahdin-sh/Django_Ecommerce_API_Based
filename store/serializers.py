@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.utils.text import slugify
-from .models import Product, Category, Comment, Cart, CartItem, Customer
+from .models import Product, Category, Comment, Cart, CartItem, Customer, Address
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -172,8 +172,40 @@ class CartSerializer(serializers.ModelSerializer):
         return f'{total_price: ,} {self.DOLLAR_SIGN}'
     
 
+class AddressDetailSerializer(serializers.ModelSerializer):
+    customer = serializers.HyperlinkedRelatedField(view_name='customer-detail', lookup_field='pk', read_only=True)
+
+    class Meta:
+        model = Address
+        fields = ['customer', 'province', 'city', 'street']
+
+
+class AddressListSerializer(serializers.ModelSerializer):
+
+    customer = serializers.HyperlinkedRelatedField(view_name='customer-detail', lookup_field='pk', read_only=True)
+    detail = serializers.HyperlinkedIdentityField(view_name='address-detail', lookup_field='pk')
+
+    class Meta:
+        model = Address
+        fields = ['detail', 'customer', 'province', 'city', 'street']
+
+
+class CustomerAddressSerializer(serializers.ModelSerializer):
+
+    class Meta:
+        model = Address
+        fields = ['province', 'city', 'street']
+    
+    
 class CustomerSerializer(serializers.ModelSerializer):
+
+    address = CustomerAddressSerializer(read_only=True)
+    user = serializers.SerializerMethodField()
+
     class Meta:
         model = Customer
-        fields = ['id', 'user', 'birth_date']
-        read_only_fields = ['user']
+        fields = ['id', 'user', 'birth_date', 'address']
+    
+    def get_user(self, obj:Customer):
+        return obj.user.username
+

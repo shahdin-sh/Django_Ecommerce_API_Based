@@ -100,6 +100,12 @@ class OrderItemInline(admin.TabularInline):
     extra = 0
     min_num = 1
 
+class AddressInline(admin.TabularInline):
+    model = models.Address
+    fiedls  = ['province', 'street', 'city']
+    extra = 0
+    min_num = 1
+
 
 @admin.register(models.Order)
 class OrderAdmin(admin.ModelAdmin):
@@ -126,22 +132,23 @@ admin.site.register(models.Category)
 
 @admin.register(models.Customer)
 class CustomerAdmin(admin.ModelAdmin):
-    list_display = ['first_name', 'last_name', 'email', 'phone_number']
+    list_display = [ 'customer_username', 'email', 'phone_number', 'address']
     list_per_page = 10
-    ordering = ['user__last_name', 'user__first_name', ]
-    search_fields = ['user__first_name__istartswith', 'user__last_name__istartswith', ]
+    ordering = ['user__username']
+    search_fields = ['user__username']
+    inlines = [AddressInline]
 
-    def first_name(self, obj):
-        return obj.user.first_name
-    
-    def last_name(self, obj):
-        return obj.user.last_name
+    def customer_username(self, obj):
+        return obj.user.username
 
     def email(self, obj):
         return obj.user.email
     
     def phone_number(self, obj):
         return obj.user.phone_number
+    
+    def address(self, obj):
+        return obj.address.objects.all()
 
 
 @admin.register(models.OrderItem)

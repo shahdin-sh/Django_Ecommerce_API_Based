@@ -15,28 +15,23 @@ from rest_framework.viewsets import ModelViewSet, GenericViewSet
 
 from .paginations import StandardResultSetPagination, LargeResultSetPagination
 from .filters import ProductFilter
-from .models import Product, Category, Comment, Cart, CartItem, Customer
-from .serializers import ProductSerializer, CategorySerializer, CommentSerializer, CartSerializer, CartItemSerializer, AddItemtoCartSerializer, CustomerSerializer
+from .models import Product, Category, Comment, Cart, CartItem, Customer, Address
+from .serializers import *
 from .permissions import IsAdminOrReadOnly, IsProductManager, IsContentManager, IsCustomerManager, IsAdmin
 
 
 # Product view
 class ProductViewSet(ModelViewSet):
-
     serializer_class = ProductSerializer
     lookup_field = 'slug'
-
     queryset = Product.objects.prefetch_related('comments').select_related('category').annotate(
         comments_count=Count('comments')
         ).all()
-    
     filter_backends = [SearchFilter, OrderingFilter , DjangoFilterBackend]
     filterset_class = ProductFilter
     ordering_fields = ['name', 'inventory', 'unit_price']
     search_fields = ['name', 'category__title']
-
     pagination_class = LargeResultSetPagination
-
     permission_classes = [IsProductManager]
 
     def destroy(self, request, slug):
@@ -60,13 +55,10 @@ class CategoryViewSet(ModelViewSet):
             # with annotate method, products_count is known as a Category field when this view is called.
             products_count = Count('products')
         )
-    
     filter_backend = [SearchFilter, DjangoFilterBackend]
     search_fields = ['title']
     filterset_fields  = ['title']
-
     pagination_class = StandardResultSetPagination
-
     permission_classes = [IsProductManager]
 
     def destroy(self, request, slug):
@@ -83,8 +75,11 @@ class CategoryViewSet(ModelViewSet):
 
 # Comment View
 class CommentViewSet(ModelViewSet):
-
     serializer_class = CommentSerializer
+    filter_backends = [OrderingFilter]
+    ordering_fields = ['datetime_created', 'name']
+    pagination_class = StandardResultSetPagination
+    permission_classes = [IsContentManager]
 
     def get_queryset(self):
         return Comment.objects.select_related('product').filter(
@@ -95,14 +90,6 @@ class CommentViewSet(ModelViewSet):
             'product' : Product.objects.get(slug=self.kwargs['product_slug'])
         }
         return context
-     
-    filter_backends = [OrderingFilter]
-    ordering_fields = ['datetime_created', 'name']
-    
-    pagination_class = StandardResultSetPagination
-
-    permission_classes = [IsContentManager]
-
 
 
 # Cart View
@@ -112,24 +99,20 @@ class CartViewSet(ModelViewSet):
         Prefetch('items', queryset=CartItem.objects.select_related('product'))
         ).all()
     lookup_field = 'id'
-
     pagination_class = StandardResultSetPagination
-
     permission_classes = [IsAdmin]
-
     lookup_value_regex = '[0-9A-Za-z]{8}\-?[0-9A-Za-z]{4}\-?[0-9A-Za-z]{4}\-?[0-9A-Za-z]{4}\-?[0-9A-Za-z]{12}'
 
 
 class CartItemViewSet(ModelViewSet):
     http_method_names = ['get', 'post', 'put', 'delete']
+    permission_classes = [IsAdmin]
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
             return AddItemtoCartSerializer
         
         return CartItemSerializer
-
-    permission_classes = [IsAdmin]
 
     def get_queryset(self):
         cart_id = self.kwargs['cart_id']
@@ -145,8 +128,10 @@ class CartItemViewSet(ModelViewSet):
 
 # Customer View
 class CustomerViewSet(ModelViewSet):
+    # each new user has customer model so post method is not allowed
+    http_method_names = ['get', 'put', 'delete']
     serializer_class = CustomerSerializer
-    queryset = Customer.objects.select_related('user').all()
+    queryset = Customer.objects.select_related('user').prefetch_related('address').all()
     
     permission_classes = [IsCustomerManager]
 
@@ -170,3 +155,30 @@ class CustomerViewSet(ModelViewSet):
     def send_private_email(self, request, pk):
         target_customer = Customer.objects.get(pk=pk)
         return Response(f'send private email to {target_customer.user.username} by {request.user.username}')
+
+
+class AdressViewSet(ModelViewSet):
+    http_method_names = ['get', 'put']
+    queryset = Address.objects.select_related('customer')
+    permission_classes = [IsCustomerManager]
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return AddressListSerializer
+        return AddressDetailSerializer
+
+    def get_serializer_context(self):
+        return {'request': self.request}
+    
+    @action(detail=False, methods=['GET', 'PUT'], permission_classes=[IsAuthenticated])
+    def me(self, request):
+        address = Address.objects.get(customer__user=request.user)
+        if request.method == 'GET':
+            serializer = AddressDetailSerializer(address)
+            return Response(serializer.data)
+        elif request.method == 'PUT':
+            serializer = AddressDetailSerializer(address, request.data)
+            serializer.is_valid(raise_exception=True)
+
+            serializer.save()
+            return Response(status=status.HTTP_200_OK)
