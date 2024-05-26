@@ -15,7 +15,7 @@ from rest_framework.viewsets import ModelViewSet, GenericViewSet
 
 from .paginations import StandardResultSetPagination, LargeResultSetPagination
 from .filters import ProductFilter
-from .models import Product, Category, Comment, Cart, CartItem, Customer, Address
+from .models import Product, Category, Comment, Cart, CartItem, Customer, Address, Order, OrderItem
 from .serializers import *
 from .permissions import IsAdminOrReadOnly, IsProductManager, IsContentManager, IsCustomerManager, IsAdmin
 
@@ -26,7 +26,7 @@ class ProductViewSet(ModelViewSet):
     lookup_field = 'slug'
     queryset = Product.objects.prefetch_related('comments').select_related('category').annotate(
         comments_count=Count('comments')
-        ).all()
+        ).all().filter(inventory__gte=1)
     filter_backends = [SearchFilter, OrderingFilter , DjangoFilterBackend]
     filterset_class = ProductFilter
     ordering_fields = ['name', 'inventory', 'unit_price']
@@ -94,19 +94,20 @@ class CommentViewSet(ModelViewSet):
 
 # Cart View
 class CartViewSet(ModelViewSet):
+    http_method_names = ['get', 'post', 'delete']
     serializer_class = CartSerializer
     queryset = Cart.objects.prefetch_related(
         Prefetch('items', queryset=CartItem.objects.select_related('product'))
         ).all()
     lookup_field = 'id'
     pagination_class = StandardResultSetPagination
-    permission_classes = [IsAdmin]
+    permission_classes = [IsAuthenticated]
     lookup_value_regex = '[0-9A-Za-z]{8}\-?[0-9A-Za-z]{4}\-?[0-9A-Za-z]{4}\-?[0-9A-Za-z]{4}\-?[0-9A-Za-z]{12}'
 
 
 class CartItemViewSet(ModelViewSet):
     http_method_names = ['get', 'post', 'put', 'delete']
-    permission_classes = [IsAdmin]
+    permission_classes = [IsAuthenticated]
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -118,15 +119,20 @@ class CartItemViewSet(ModelViewSet):
         cart_id = self.kwargs['cart_id']
         return CartItem.objects.select_related('cart', 'product').filter(cart__id=cart_id).all()
     
-    def get_serializer_context(self):
-        context = {
-            'cart' : Cart.objects.get(id=self.kwargs['cart_id']),
-            'request' : self.request,
-        }
-        return context
+
+    def create(self, request, *args, **kwargs):
+        # add item to cart with AddItemtoCartSerializer
+        context = {'cart' : Cart.objects.get(id=self.kwargs['cart_id']), 'request' : request}
+        item_creation_serializers = AddItemtoCartSerializer(data=request.data, context=context)
+        item_creation_serializers.is_valid(raise_exception=True)
+
+        # Get request and observing the items is with CartItemSerializer
+        created_item = item_creation_serializers.save()
+        get_request_serializer = CartItemSerializer(created_item, context={'request': request})
+        return Response(get_request_serializer.data, status=status.HTTP_201_CREATED)
 
 
-# Customer View
+# Customer & Address View
 class CustomerViewSet(ModelViewSet):
     # each new user has customer model so post method is not allowed
     http_method_names = ['get', 'put', 'delete']
@@ -182,3 +188,62 @@ class AdressViewSet(ModelViewSet):
 
             serializer.save()
             return Response(status=status.HTTP_200_OK)
+
+
+# Order & OrderItem View
+class OrderViewSet(ModelViewSet):
+    filter_backends = [OrderingFilter, SearchFilter]
+    search_fields = ['customer__user__username', 'status']
+    ordering_fields = ['datetime_created', 'status']
+    pagination_class = StandardResultSetPagination
+
+    def get_queryset(self):
+        queryset = Order.objects.prefetch_related(
+            Prefetch('items', queryset=OrderItem.objects.select_related('product')),
+            Prefetch('customer', queryset=Customer.objects.select_related('user').prefetch_related('address')),
+        ).order_by('datetime_created')
+        
+        user = self.request.user
+        if user.is_staff:
+            return queryset.all()
+            
+        return queryset.filter(customer__user_id=user.id)
+
+    def get_serializer_class(self):
+        # get serializer class based on http method
+        if self.request.method == 'POST':
+            return OrderCreationSerializer
+        
+        # get serializer class based on user authentication 
+        if self.request.user.is_staff:
+            return AdminOrderSerializer
+        return OrderSerializer
+    
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        if queryset.count() == 0 and not request.user.is_staff:
+            return Response('You have no orders', status=status.HTTP_200_OK)
+        
+        # apply pagination
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)    
+    
+    def create(self, request, *args, **kwargs):
+        # create and save  the instance from OrderCreationSerializer
+        order_creation_serializer = OrderCreationSerializer(data=request.data, context={'request': self.request})
+        order_creation_serializer.is_valid(raise_exception=True)
+        created_order = order_creation_serializer.save()
+
+        # showing data in OrderSerializer
+        serializer = OrderSerializer(created_order)
+        return Response(serializer.data , status=status.HTTP_201_CREATED)
+    
+    def get_permissions(self):
+        if self.request.method in ['DELETE', 'PATCH', 'PUT']:
+            return [IsAdmin()]
+        return [IsAuthenticated()]

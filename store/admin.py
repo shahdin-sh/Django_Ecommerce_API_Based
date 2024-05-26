@@ -166,6 +166,7 @@ class CartItemInline(admin.TabularInline):
 
 @admin.register(models.Cart)
 class CartAdmin(admin.ModelAdmin):
-    list_display = ['id', 'created_at']
+    # cart obj just can be created by authenticated users who send Post Requests.
+    readonly_fields = ['id', 'created_at']
     inlines = [CartItemInline]
 
