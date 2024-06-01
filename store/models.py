@@ -29,7 +29,7 @@ class Product(models.Model):
     category = models.ForeignKey(Category, on_delete=models.PROTECT, related_name='products')
     slug = models.SlugField(unique=True)
     description = models.TextField()
-    unit_price = models.DecimalField(max_digits=6, decimal_places=2)
+    unit_price = models.PositiveIntegerField()
     inventory = models.IntegerField(validators=[MinValueValidator(0)])
     datetime_created = models.DateTimeField(auto_now_add=True)
     datetime_modified = models.DateTimeField(auto_now=True)
@@ -37,6 +37,10 @@ class Product(models.Model):
 
     def __str__(self):
         return self.name
+    
+    @property
+    def clean_price(self):
+        return f'{self.unit_price: ,}'
 
 
 class Customer(models.Model):
@@ -92,13 +96,17 @@ class OrderItem(models.Model):
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='items')
     product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name='order_items')
     quantity = models.PositiveSmallIntegerField()
-    unit_price = models.DecimalField(max_digits=6, decimal_places=2)
+    unit_price = models.PositiveIntegerField()
 
     class Meta:
         unique_together = [['order', 'product']]
 
     def __str__(self):
         return f'item_{self.id} | belongs to order_{self.order.id}'
+    
+    @property
+    def clean_price(self):
+        return f'{self.unit_price: ,}'
 
 
 class CommentManger(models.Manager):

@@ -163,7 +163,6 @@ AUTH_USER_MODEL = 'accounts.CustomUser'
 # Rest Framework settings
 REST_FRAMEWORK = {
     # 'PAGE_SIZE' : 10,
-    'COERCE_DECIMAL_TO_STRING': False,
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),

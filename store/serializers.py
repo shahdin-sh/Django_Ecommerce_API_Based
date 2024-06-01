@@ -51,21 +51,14 @@ class ProductSerializer(serializers.ModelSerializer):
     title = serializers.CharField(max_length=255, source='name')
     detail = serializers.HyperlinkedIdentityField(view_name='product-detail', lookup_field = 'slug')
     category = serializers.HyperlinkedRelatedField(queryset=Category.objects.all(), view_name = 'category-detail', lookup_field = 'slug')
-    price = serializers.DecimalField(max_digits=6, decimal_places=2, source='unit_price')
-    total_price = serializers.SerializerMethodField()
+    unit_price = serializers.CharField(source='clean_price')
     num_of_comments = serializers.IntegerField(source='comments_count', read_only=True)
     comments = CommentSerializer(many=True, read_only=True) # Nested serializer for comments
 
     class Meta:
         model = Product
-        fields = ['title', 'price', 'category', 'inventory', 'total_price', 'num_of_comments', 'detail', 'comments']
-
-    DOLLAR_SIGN = '$'
-
-    def get_total_price(self, obj:Product):
-        total_price = f'{int(obj.unit_price * obj.inventory): ,}'
-        return f'{total_price} {self.DOLLAR_SIGN}'
-    
+        fields = ['title', 'unit_price', 'category', 'inventory', 'num_of_comments', 'detail', 'comments']
+        
     def create(self, validated_data):
         product = Product(**validated_data)
         product.slug = slugify(product.name)
@@ -88,6 +81,7 @@ class ProductSerializer(serializers.ModelSerializer):
 class CartProductSerializer(serializers.ModelSerializer):
 
     detail = serializers.HyperlinkedIdentityField(view_name='product-detail', lookup_field = 'slug')
+    unit_price = serializers.CharField(source='clean_price')
 
     class Meta:
         model = Product
@@ -143,14 +137,14 @@ class CartItemSerializer(serializers.ModelSerializer):
         fields = ['id', 'product', 'quantity', 'current_product_stock', 'total_price']
         read_only_fields = ['quantity']
 
-    DOLLAR_SIGN = '$'
+    TOMAN_SIGN = 'T'
 
     def get_current_product_stock(self, obj:CartItem):
         return obj.product.inventory - obj.quantity 
 
     def get_total_price(self, obj:CartItem):
-        total_price = (obj.quantity * int(obj.product.unit_price))
-        return f'{total_price: ,} {self.DOLLAR_SIGN}'
+        total_price = (obj.quantity * obj.product.unit_price)
+        return f'{total_price: ,} {self.TOMAN_SIGN}'
 
     def update(self, instance, validated_data):
         #  Perform custom validation checks 
@@ -173,11 +167,11 @@ class CartSerializer(serializers.ModelSerializer):
         model = Cart
         fields = ['id', 'items', 'total_price']
 
-    DOLLAR_SIGN = '$'
+    TOMAN_SIGN = 'T'
 
     def get_total_price(self, obj:Cart):
         total_price = sum([item.quantity * int(item.product.unit_price) for item in obj.items.all()])
-        return f'{total_price: ,} {self.DOLLAR_SIGN}'
+        return f'{total_price: ,} {self.TOMAN_SIGN}'
     
 
 # Address Serializers
@@ -234,18 +228,20 @@ class OrderItemSerializer(serializers.ModelSerializer):
 
     product = serializers.SerializerMethodField()
     total_price = serializers.SerializerMethodField()
+    unit_price = serializers.CharField(source='clean_price')
 
     class Meta:
         model = OrderItem
         fields = ['product', 'quantity', 'unit_price', 'total_price']
 
-    DOLLAR_SIGN = '$'
+    TOMAN_SIGN = 'T'
 
     def get_product(self, obj:OrderItem):
         return obj.product.name
     
     def get_total_price(self, obj:OrderItem):
-        return f'{obj.quantity * obj.unit_price} {self.DOLLAR_SIGN}'
+        total_price = obj.quantity * obj.unit_price
+        return f'{total_price: ,} {self.TOMAN_SIGN}'
     
 
 class AdminOrderSerializer(serializers.ModelSerializer):
@@ -258,10 +254,11 @@ class AdminOrderSerializer(serializers.ModelSerializer):
         model = Order
         fields = ['id', 'datetime_created', 'status', 'total_items_price', 'customer', 'items']
     
-    DOLLAR_SIGN = '$'
+    TOMAN_SIGN = 'T'
 
     def get_total_items_price(self, obj:Order):
-        return f'{sum([item.quantity * item.unit_price for item in obj.items.all()])} {self.DOLLAR_SIGN}'
+        total_order_items_price = sum([item.quantity * item.unit_price for item in obj.items.all()])
+        return f'{total_order_items_price: ,} {self.TOMAN_SIGN}'
 
 
 class OrderSerializer(serializers.ModelSerializer):
@@ -273,10 +270,11 @@ class OrderSerializer(serializers.ModelSerializer):
         fields = ['id', 'datetime_created', 'status', 'total_items_price', 'items']
         read_only_fields = ['status']
     
-    DOLLAR_SIGN = '$'
+    TOMAN_SIGN = 'T'
 
     def get_total_items_price(self, obj:Order):
-        return f'{sum([item.quantity * item.unit_price for item in obj.items.all()])} {self.DOLLAR_SIGN}'
+        total_order_items_price = sum([item.quantity * item.unit_price for item in obj.items.all()])
+        return f'{total_order_items_price: ,} {self.TOMAN_SIGN}'
 
 
 class OrderCreationSerializer(serializers.Serializer):
