@@ -4,20 +4,17 @@ from django.http import HttpResponse
 from django.shortcuts import render, get_object_or_404
 
 from rest_framework import status
-from rest_framework.decorators import api_view, action
+from rest_framework.decorators import action
 from rest_framework.filters import OrderingFilter, SearchFilter
-from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
-from rest_framework.mixins import RetrieveModelMixin, UpdateModelMixin, DestroyModelMixin, CreateModelMixin, ListModelMixin
-from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.views import APIView
-from rest_framework.viewsets import ModelViewSet, GenericViewSet
+from rest_framework.viewsets import ModelViewSet
 
-from .paginations import StandardResultSetPagination, LargeResultSetPagination
 from .filters import ProductFilter
 from .models import Product, Category, Comment, Cart, CartItem, Customer, Address, Order, OrderItem
-from .serializers import *
+from .paginations import StandardResultSetPagination, LargeResultSetPagination
 from .permissions import IsAdminOrReadOnly, IsProductManager, IsContentManager, IsCustomerManager, IsAdmin
+from .serializers import *
 
 
 # Product view
@@ -26,7 +23,7 @@ class ProductViewSet(ModelViewSet):
     lookup_field = 'slug'
     queryset = Product.objects.prefetch_related('comments').select_related('category').annotate(
         comments_count=Count('comments')
-        ).all().filter(inventory__gte=1)
+        ).all().order_by('-id')
     filter_backends = [SearchFilter, OrderingFilter , DjangoFilterBackend]
     filterset_class = ProductFilter
     ordering_fields = ['name', 'inventory', 'unit_price']
@@ -34,6 +31,7 @@ class ProductViewSet(ModelViewSet):
     pagination_class = LargeResultSetPagination
     permission_classes = [IsProductManager]
 
+    
     def destroy(self, request, slug):
         product = get_object_or_404(Product.objects.select_related('category').all(), slug=slug)
         if product.order_items.count() > 0:

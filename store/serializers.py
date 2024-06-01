@@ -82,7 +82,7 @@ class ProductSerializer(serializers.ModelSerializer):
         instance.save()
 
         return instance
-    
+ 
 
 # Cart Serializers
 class CartProductSerializer(serializers.ModelSerializer):
