@@ -1,7 +1,8 @@
+import requests, json
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Count, Prefetch
 from django.http import HttpResponse
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import redirect, get_object_or_404
 
 from rest_framework import status
 from rest_framework.decorators import action
@@ -9,6 +10,7 @@ from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
+from rest_framework.views import APIView
 
 from .filters import ProductFilter
 from .models import Product, Category, Comment, Cart, CartItem, Customer, Address, Order, OrderItem
@@ -245,3 +247,106 @@ class OrderViewSet(ModelViewSet):
         if self.request.method in ['DELETE', 'PATCH', 'PUT']:
             return [IsAdmin()]
         return [IsAuthenticated()]
+
+
+class PaymentProcess(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        authority = request.GET.get('Authority')
+        payment_request_status = request.GET.get('Status')
+
+        if payment_request_status == 'OK':
+            # payment verification request to zarinpal 
+            verify_request_url = "https://sandbox.zarinpal.com/pg/rest/WebGate/PaymentVerification.json"
+           
+            request_header = {
+                'accept': 'application/json',
+                'content-type': 'application/json' 
+            }
+
+            payment_data = request.session['payment_data']
+
+            data_body = {
+                'MerchantID': payment_data['merchant_id'],
+                'Amount': payment_data['amount'],
+                'Authority': authority
+            }
+
+            response = requests.post(url=verify_request_url, data=json.dumps(data_body), headers=request_header)
+        
+            try: 
+                data = response.json()
+            except json.JSONDecodeError as e:
+                print(response.json())
+                return Response({"error": "Invalid JSON response from the payment gateway."}, status=status.HTTP_400_BAD_REQUEST)
+            
+            if data['Status'] == 100:
+
+                # set the order status to paid and save it in DB
+                order_obj = Order.objects.select_related('customer').prefetch_related('items').get(id=payment_data['order_id'])
+                order_obj.status = 'paid'
+                order_obj.save()
+
+                return Response(f"Transaction success. | RefID: {data['RefID']}.", status=status.HTTP_200_OK)
+            
+            elif data['Status'] == 101:
+                return Response(f"Transaction has been submitted before. | RefID: {data['RefID']}", status=status.HTTP_200_OK)
+            
+            else:
+                return Response(f"Transaction failed. | Status: {data['Status']}", status=status.HTTP_400_BAD_REQUEST)
+                        
+        elif payment_request_status == 'NOK':
+            return Response('Transaction failed or canceled by user.', status=status.HTTP_400_BAD_REQUEST)
+        
+        return Response('Enter your OrderId below to initiate the payment process.', status=status.HTTP_200_OK)
+    
+    def post(self, request):
+        serializer = PaymentSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        
+        order_id = request.data['order_id']
+        order_obj = Order.objects.select_related('customer').prefetch_related('items').get(id=order_id)
+        
+        # payment data request to zarinpal
+        zarinpal_request_url = 'https://sandbox.zarinpal.com/pg/rest/WebGate/PaymentRequest.json'
+
+        request_header = {
+            'accept': 'application/json',
+            'content-type': 'application/json'
+        }
+
+        data_body = {
+            'MerchantID': '1344b5d5-0048-11e8-94db-005056a205be',
+            'Amount': order_obj.total_items_price,
+            'Description': f'Transaction for {order_obj.customer} customer | OrderID: {order_obj.id}',
+            'CallbackURL': 'http://127.0.0.1:8000/store/payment'
+        }
+
+        response = requests.post(url=zarinpal_request_url, data=json.dumps(data_body), headers=request_header)
+
+        try: 
+            data = response.json()
+        except json.JSONDecodeError as e:
+            return Response({"error": "Invalid JSON response from the payment gateway."}, status=status.HTTP_400_BAD_REQUEST)
+
+        authority = data['Authority']
+    
+        if data['Status'] == 100 and 'errors' not in data and authority != '':
+            # delete the session about previous transaction
+            if request.session.get('payment_data'):
+                del request.session['payment_data']
+
+            # if post request to zarinpal was successful store payment data in session in order to have them in GET request
+            request.session['payment_data'] = {
+                'merchant_id' : data_body['MerchantID'],
+                'amount': data_body['Amount'],
+                'order_id': order_id
+            }
+
+            payment_url = 'https://sandbox.zarinpal.com/pg/StartPay/{authority}'.format(authority=authority)
+            return Response(f'paymant_url: {payment_url}', status=status.HTTP_200_OK)
+        else:
+            return Response(f"failed because of errors : {data.get('errors')}", status=status.HTTP_400_BAD_REQUEST)
+    
+

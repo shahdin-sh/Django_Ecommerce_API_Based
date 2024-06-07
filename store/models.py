@@ -90,6 +90,10 @@ class Order(models.Model):
 
     def __str__(self):
         return f'Order id={self.id}'
+    
+    @property
+    def total_items_price(self):
+        return sum([item.unit_price * item.quantity for item in self.items.all()])
 
 
 class OrderItem(models.Model):

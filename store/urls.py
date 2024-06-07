@@ -24,4 +24,5 @@ cart_router.register('items', views.CartItemViewSet, basename='cart-items') # ca
 
 urlpatterns = [
     path('', include(router.urls)),
+    path('payment', views.PaymentProcess.as_view(), name='payment-process'),
 ] + product_router.urls + cart_router.urls

@@ -1,8 +1,9 @@
 from rest_framework import serializers
 
-from django.utils.text import slugify
-from django.shortcuts import get_object_or_404
 from django.db import transaction 
+from django.db.models import Prefetch
+from django.shortcuts import redirect
+from django.utils.text import slugify
 
 from .models import Product, Category, Comment, Cart, CartItem, Customer, Address, Order, OrderItem
 
@@ -324,4 +325,24 @@ class OrderCreationSerializer(serializers.Serializer):
             # cart_obj.delete()
 
             return order_obj
-            
+
+
+class PaymentSerializer(serializers.Serializer):
+    order_id = serializers.IntegerField()
+
+    def validate(self, data):
+        request = self.context.get('request')
+
+        try:
+            order_id = data['order_id']
+            order = Order.objects.select_related('customer').prefetch_related('items').get(id=order_id)
+        except Order.DoesNotExist:
+            raise serializers.ValidationError(f'Order with id {order_id} does not exist.')
+        
+        if order.customer.user != request.user:
+            raise serializers.ValidationError('You dont have permission to perform this action')
+        
+        if order.status != Order.ORDER_STATUS_UNPAID:
+            raise serializers.ValidationError(f'Order with id {order_id} has already been paid.')
+        
+        return data
