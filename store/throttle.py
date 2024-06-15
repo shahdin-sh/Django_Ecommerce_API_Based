@@ -18,7 +18,7 @@ class BaseThrottleView(views.APIView):
         if request.user.is_superuser or request.user.groups.filter(name='admin').exists(): 
             return [AdminUserThrottle()]
         
-        # throttle scope should set in the view and scoped rate throttle only use for managers 
+        # throttle scope should set in the view and scoped rate throttle only can used by managers 
         if request.user.groups.filter(name=group_name).exists():
             return [ScopedRateThrottle()]
         
@@ -31,7 +31,7 @@ class BaseThrottleView(views.APIView):
     def validation(self, group_name, throttle_scope):
         throttle_rates =  list(settings.REST_FRAMEWORK.get('DEFAULT_THROTTLE_RATES', {}).keys())
         valid_group_names = list(Group.objects.values_list('name', flat=True))
-           
+
         if group_name and group_name not in valid_group_names:
             raise ValidationError(f'Invalid group name: {group_name}, options are: {valid_group_names}')
         
