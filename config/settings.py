@@ -162,15 +162,14 @@ AUTH_USER_MODEL = 'accounts.CustomUser'
 
 # Rest Framework settings
 REST_FRAMEWORK = {
-    # 'PAGE_SIZE' : 10,
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
-    'DEFAULT_FILTER_BACKENDS': [
-        'django_filters.rest_framework.DjangoFilterBackend',
-        'rest_framework.filters.OrderingFilter',
-        'rest_framework.filters.SearchFilter',
-    ],
+    # 'DEFAULT_FILTER_BACKENDS': [
+    #     'django_filters.rest_framework.DjangoFilterBackend',
+    #     'rest_framework.filters.OrderingFilter',
+    #     'rest_framework.filters.SearchFilter',
+    # ],
     'DEFAULT_PARSER_CLASSES': [
         'rest_framework.parsers.JSONParser',
         'rest_framework.parsers.FormParser',
@@ -188,6 +187,23 @@ REST_FRAMEWORK = {
         # custom renderers
         'store.renderers.PlainTextRenderer',
     ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '10/minute',
+        'user': '20/minute',
+        # custom rates
+        'product': '7/minute',
+        'category': '7/minute',
+        'comment': '7/minute',
+        'customer': '7/minute',
+        'address': '7/minute',
+        'order': '7/minute',
+        'payment': '5/minute', 
+    },
+    # 'DEFAULT_THROTTLE_CLASSES': [
+    #     'rest_framework.throttling.AnonRateThrottle',
+    #     'rest_framework.throttling.UserRateThrottle',
+    # ],
+    # 'PAGE_SIZE' : 10,
     # 'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.LimitOffsetPagination',
 #    ' DEFULT_PERMISSION_CLASSES' : [
 #         'rest_framework.permissions.IsAuthenticated'

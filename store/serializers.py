@@ -1,8 +1,7 @@
 from rest_framework import serializers
 
 from django.db import transaction 
-from django.db.models import Prefetch
-from django.shortcuts import redirect
+from django.db.models import Count
 from django.utils.text import slugify
 
 from .models import Product, Category, Comment, Cart, CartItem, Customer, Address, Order, OrderItem
@@ -176,22 +175,54 @@ class CartSerializer(serializers.ModelSerializer):
     
 
 # Address Serializers
-class AddressDetailSerializer(serializers.ModelSerializer):
-    customer = serializers.HyperlinkedRelatedField(view_name='customer-detail', lookup_field='pk', read_only=True)
-
+class AddressSerializer(serializers.ModelSerializer):
     class Meta:
         model = Address
-        fields = ['customer', 'province', 'city', 'street']
+        fields = ['pk', 'province', 'city', 'street']
 
 
-class AddressListSerializer(serializers.ModelSerializer):
+class AddAddressSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Address
+        fields = ['province', 'city', 'street']
+    
+    def validate(self, data):
+        request = self.context.get('request')
+        address_instance = Address.objects.select_related('customer').filter(customer__user=request.user)
 
+        if address_instance.exists():
+            raise serializers.ValidationError('address has already created.')
+        return data
+        
+    def create(self, validated_data):
+        request = self.context['request']
+        customer = Customer.objects.select_related('user').prefetch_related('address').get(user=request.user)
+
+        address = Address.objects.create(customer=customer, **validated_data)
+        self.instance = address
+        return address    
+
+
+class ManagerAddressSerializer(serializers.ModelSerializer):
     customer = serializers.HyperlinkedRelatedField(view_name='customer-detail', lookup_field='pk', read_only=True)
     detail = serializers.HyperlinkedIdentityField(view_name='address-detail', lookup_field='pk')
 
     class Meta:
         model = Address
         fields = ['detail', 'customer', 'province', 'city', 'street']
+
+
+class ManagersAddAddressSerializer(serializers.ModelSerializer):
+    customer = serializers.PrimaryKeyRelatedField(queryset=Customer.objects.all())
+
+    class Meta:
+        model = Address
+        fields = ['customer', 'province', 'city', 'street']
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args,**kwargs)
+        # Filter customers who do not have any associated addresses
+        self.fields['customer'].queryset = Customer.objects.annotate(address_count=Count('address')).filter(address_count__lt=1)
 
 
 # Customer Serializers

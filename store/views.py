@@ -9,15 +9,22 @@ from rest_framework.decorators import action
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.viewsets import ModelViewSet
+from rest_framework.throttling import UserRateThrottle, AnonRateThrottle, ScopedRateThrottle
 from rest_framework.views import APIView
+from rest_framework.viewsets import ModelViewSet
+from rest_framework.exceptions import ValidationError
 
+from .serializers import *
 from .filters import ProductFilter
 from .models import Product, Category, Comment, Cart, CartItem, Customer, Address, Order, OrderItem
 from .paginations import StandardResultSetPagination, LargeResultSetPagination
 from .permissions import IsAdminOrReadOnly, IsProductManager, IsContentManager, IsCustomerManager, IsAdmin
-from .serializers import *
+from .throttle import AdminUserThrottle, BaseThrottleView
 
+
+# Determines the appropriate throttle class based on throttle_scopes and four types of user 
+# inlucding: superusers, managers, anonymous users and authenticated users.
+base_throttle = BaseThrottleView()
 
 # Product view
 class ProductViewSet(ModelViewSet):
@@ -33,7 +40,6 @@ class ProductViewSet(ModelViewSet):
     pagination_class = LargeResultSetPagination
     permission_classes = [IsProductManager]
 
-    
     def destroy(self, request, slug):
         product = get_object_or_404(Product.objects.select_related('category').all(), slug=slug)
         if product.order_items.count() > 0:
@@ -45,10 +51,13 @@ class ProductViewSet(ModelViewSet):
         product.delete()
         return Response(status=status.HTTP_404_NOT_FOUND)
     
+    def get_throttles(self):
+        self.throttle_scope = 'product'
+        return base_throttle.get_throttles(request=self.request, throttle_scope=self.throttle_scope, group_name='Product Manager')
+    
 
 # Category View
 class CategoryViewSet(ModelViewSet):
-
     serializer_class = CategorySerializer
     lookup_field = 'slug'
     queryset = Category.objects.all().annotate(
@@ -71,7 +80,11 @@ class CategoryViewSet(ModelViewSet):
         
         category.delete()
         return HttpResponse(status=status.HTTP_404_NOT_FOUND)
-
+    
+    def get_throttles(self):
+        self.throttle_scope = 'category'
+        return base_throttle.get_throttles(self.request, throttle_scope=self.throttle_scope, group_name='Product Manager')
+    
 
 # Comment View
 class CommentViewSet(ModelViewSet):
@@ -90,6 +103,10 @@ class CommentViewSet(ModelViewSet):
             'product' : Product.objects.get(slug=self.kwargs['product_slug'])
         }
         return context
+    
+    def get_throttles(self):
+        self.throttle_scope = 'comment'
+        return base_throttle.get_throttles(self.request, throttle_scope=self.throttle_scope, group_name='Content Manager')
 
 
 # Cart View
@@ -103,6 +120,9 @@ class CartViewSet(ModelViewSet):
     pagination_class = StandardResultSetPagination
     permission_classes = [IsAuthenticated]
     lookup_value_regex = '[0-9A-Za-z]{8}\-?[0-9A-Za-z]{4}\-?[0-9A-Za-z]{4}\-?[0-9A-Za-z]{4}\-?[0-9A-Za-z]{12}'
+
+    def get_throttles(self):
+        return base_throttle.get_throttles(self.request)
 
 
 class CartItemViewSet(ModelViewSet):
@@ -130,20 +150,22 @@ class CartItemViewSet(ModelViewSet):
         created_item = item_creation_serializers.save()
         get_request_serializer = CartItemSerializer(created_item, context={'request': request})
         return Response(get_request_serializer.data, status=status.HTTP_201_CREATED)
-
+    
+    def get_throttles(self):
+        return base_throttle.get_throttles(self.request)
+    
 
 # Customer & Address View
 class CustomerViewSet(ModelViewSet):
     # each new user has customer model so post method is not allowed
-    http_method_names = ['get', 'put', 'delete']
+    http_method_names = ['get', 'put']
     serializer_class = CustomerSerializer
     queryset = Customer.objects.select_related('user').prefetch_related('address').all()
-    
     permission_classes = [IsCustomerManager]
 
     @action(detail=False, methods=['GET', 'PUT', 'DELETE'], permission_classes=[IsAuthenticated])
     def me(self, request):
-        customer = Customer.objects.get(user=request.user)
+        customer = Customer.objects.select_related('user').get(user=request.user)
         if request.method == 'GET':
             # no need of get_object_or_404 because of customer creation signal for newly signed up users
             serializer = CustomerSerializer(customer)
@@ -154,41 +176,48 @@ class CustomerViewSet(ModelViewSet):
 
             serializer.save()
             return Response(status=status.HTTP_200_OK)
-        elif request.method == 'DELETE':
-            return Response('Each user should be a customer', status=status.HTTP_405_METHOD_NOT_ALLOWED)
     
     @action(detail=True, methods=['GET'])
     def send_private_email(self, request, pk):
         target_customer = Customer.objects.get(pk=pk)
         return Response(f'send private email to {target_customer.user.username} by {request.user.username}')
 
+    def get_throttles(self):
+      self.throttle_scope = 'customer'
+      return base_throttle.get_throttles(self.request, throttle_scope=self.throttle_scope, group_name='Customer Manager')
 
-class AdressViewSet(ModelViewSet):
-    http_method_names = ['get', 'put']
-    queryset = Address.objects.select_related('customer')
-    permission_classes = [IsCustomerManager]
+
+class AddressViewSet(ModelViewSet):
+    def get_queryset(self):
+        queryset = Address.objects.select_related('customer').order_by('customer__user__username')
+        # including admins and customer managers
+        if self.request.user.is_staff:
+            return queryset.all()
+        # including authenticated users
+        user_queryset = queryset.filter(customer__user=self.request.user)
+        if user_queryset.exists():
+            return user_queryset
+        return user_queryset.none()
 
     def get_serializer_class(self):
-        if self.action == 'list':
-            return AddressListSerializer
-        return AddressDetailSerializer
-
-    def get_serializer_context(self):
-        return {'request': self.request}
+        if self.request.user.is_superuser or self.request.user.groups.filter(name='Customer Manager').exists():
+            if self.request.method == 'POST':
+                return ManagersAddAddressSerializer
+            return ManagerAddressSerializer
+        
+        if self.request.method == 'POST':
+            return AddAddressSerializer
+        return AddressSerializer
+        
+    def get_permissions(self):
+        if self.request.method in ['DELETE']:
+            return [IsCustomerManager()]
+        return [IsAuthenticated()]
     
-    @action(detail=False, methods=['GET', 'PUT'], permission_classes=[IsAuthenticated])
-    def me(self, request):
-        address = Address.objects.get(customer__user=request.user)
-        if request.method == 'GET':
-            serializer = AddressDetailSerializer(address)
-            return Response(serializer.data)
-        elif request.method == 'PUT':
-            serializer = AddressDetailSerializer(address, request.data)
-            serializer.is_valid(raise_exception=True)
-
-            serializer.save()
-            return Response(status=status.HTTP_200_OK)
-
+    def get_throttles(self):
+        self.throttle_scope = 'address'
+        return base_throttle.get_throttles(self.request, throttle_scope=self.throttle_scope, group_name='Customer Manager')
+    
 
 # Order & OrderItem View
 class OrderViewSet(ModelViewSet):
@@ -204,7 +233,7 @@ class OrderViewSet(ModelViewSet):
         ).order_by('datetime_created')
         
         user = self.request.user
-        if user.is_staff:
+        if user.is_superuser:
             return queryset.all()
             
         return queryset.filter(customer__user_id=user.id)
@@ -215,7 +244,7 @@ class OrderViewSet(ModelViewSet):
             return OrderCreationSerializer
         
         # get serializer class based on user authentication 
-        if self.request.user.is_staff:
+        if self.request.user.is_superuser:
             return AdminOrderSerializer
         return OrderSerializer
     
@@ -247,8 +276,12 @@ class OrderViewSet(ModelViewSet):
         if self.request.method in ['DELETE', 'PATCH', 'PUT']:
             return [IsAdmin()]
         return [IsAuthenticated()]
+    
+    def get_throttles(self):
+      self.throttle_scope = 'order'
+      return base_throttle.get_throttles(self.request, throttle_scope=self.throttle_scope, group_name='Order Manager')
 
-
+    
 class PaymentProcess(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -349,4 +382,6 @@ class PaymentProcess(APIView):
         else:
             return Response(f"failed because of errors : {data.get('errors')}", status=status.HTTP_400_BAD_REQUEST)
     
-
+    def get_throttles(self):
+        self.throttle_scope = 'payment'
+        return base_throttle.get_throttles(self.request, throttle_scope=self.throttle_scope)

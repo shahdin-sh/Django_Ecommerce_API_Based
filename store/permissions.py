@@ -1,6 +1,7 @@
 from rest_framework import permissions
 from django.contrib.auth.models import Group
 from copy import deepcopy
+from .models import Customer
 
 
 class IsAdmin(permissions.BasePermission):
@@ -37,7 +38,7 @@ class IsProductManager(permissions.BasePermission, IsAdminOrReadOnlyMixin, Group
             return True
 
 
-class IsContentManager(permissions.BasePermission, IsAdminOrReadOnlyMixin):
+class IsContentManager(permissions.BasePermission, IsAdminOrReadOnlyMixin, GroupCheckMixin):
     def has_permission(self, request, view):
         if self.has_read_only_or_admin_permission(request, view) or self.check_users_group(request, view, 'Content Manager'):
             return True

@@ -10,7 +10,7 @@ router.register('products', views.ProductViewSet, basename='product') # product-
 router.register('categories', views.CategoryViewSet, basename='category') # category-list | category-detail
 router.register('carts', views.CartViewSet, basename='cart') # cart-list | cart-detail
 router.register('customers', views.CustomerViewSet, basename='customer') # customer-list | customer-detail
-router.register('addresses', views.AdressViewSet, basename='address') # address-list | address-detail
+router.register('addresses', views.AddressViewSet, basename='address') # address-list | address-detail
 router.register('orders', views.OrderViewSet, basename='order') # order-list | order-view
 
 product_router = routers.NestedDefaultRouter(router, 'products', lookup='product') # products/product_slug
