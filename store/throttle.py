@@ -10,6 +10,8 @@ class AdminUserThrottle(BaseThrottle):
         return True
 
 class BaseThrottleView(views.APIView):
+    throttle_classes = [UserRateThrottle, AnonRateThrottle, ScopedRateThrottle, AdminUserThrottle]
+
     # group name and throttle scope must me str and they are optional 
     def get_throttles(self, request, group_name=None, throttle_scope=None):
         # validate group_name and throttle scope 

@@ -1,5 +1,8 @@
+from typing import Any
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
+from django.db.models.query import QuerySet
+from django.http import HttpRequest
 from .models import CustomUser
 from.forms import CustomUserChangeForm, CustomUserCreationForm 
 
@@ -30,6 +33,10 @@ class CustomUserAdmin(UserAdmin):
     @admin.display(description='groups')
     def get_group(self, obj):
         return ','.join([group.name for group in obj.groups.all()])
+    
+    def get_queryset(self, request: HttpRequest):
+        queryset = super().get_queryset(request)
+        return queryset.prefetch_related('groups')
 
 
 # # registering models

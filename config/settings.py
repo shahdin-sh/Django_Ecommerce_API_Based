@@ -162,6 +162,7 @@ AUTH_USER_MODEL = 'accounts.CustomUser'
 
 # Rest Framework settings
 REST_FRAMEWORK = {
+    'DEFAULT_CACHE_RESPONSE_TIMEOUT': 60 * 15,
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
@@ -194,9 +195,9 @@ REST_FRAMEWORK = {
         'product': '170/day',
         'category': '170/day',
         'comment': '170/day',
-        'customer': '7/day',
-        'address': '7/day',
-        'order': '7/day',
+        'customer': '170/day',
+        'address': '170/day',
+        'order': '170/day',
         'payment': '20/day', 
     },
     # 'DEFAULT_THROTTLE_CLASSES': [
@@ -240,3 +241,11 @@ DEBUG_TOOLBAR_CONFIG = {
 }
 
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+
+# cache settings
+CACHES = {
+    'default': {
+        'BACKEND': 'django_bmemcached.memcached.BMemcached',
+        'LOCATION': '127.0.0.1:11211',
+    }
+}
