@@ -374,6 +374,6 @@ class PaymentSerializer(serializers.Serializer):
             raise serializers.ValidationError('You dont have permission to perform this action')
         
         if order.status != Order.ORDER_STATUS_UNPAID:
-            raise serializers.ValidationError(f'Order with id {order_id} has already been paid.')
+            raise serializers.ValidationError(f'Order with id {order_id} is already paid.')
         
         return data

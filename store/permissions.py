@@ -6,22 +6,22 @@ from .models import Customer
 
 class IsAdmin(permissions.BasePermission):
     def has_permission(self, request, view):
-        return bool(request.user and request.user.is_staff)
+        return bool(request.user and request.user.is_superuser)
 
 
 class IsAdminOrReadOnly(permissions.BasePermission):
     def has_permission(self, request, view):
-        return bool(request.method in permissions.SAFE_METHODS or (request.user and request.user.is_staff))
+        return bool(request.method in permissions.SAFE_METHODS or (request.user and request.user.is_superuser))
     
     
 # Mixins
 class IsAdminMixin:
     def has_admin_permission(self, request, view):
-        return bool(request.user and request.user.is_staff)
+        return bool(request.user and request.user.is_superuser)
 
 class IsAdminOrReadOnlyMixin:
     def has_read_only_or_admin_permission(self, request, view):
-        return bool(request.method in permissions.SAFE_METHODS or (request.user and request.user.is_staff))
+        return bool(request.method in permissions.SAFE_METHODS or (request.user and request.user.is_superuser))
 
 class GroupCheckMixin:
     def check_users_group(self, request, view, group_name):
@@ -50,6 +50,12 @@ class IsCustomerManager(permissions.BasePermission, IsAdminMixin, GroupCheckMixi
             return True
         
         return bool(request.user and request.user.has_perm('store.send_private_email'))
+
+
+class IsOrderManager(permissions.BasePermission, IsAdminMixin, GroupCheckMixin):
+    def has_permission(self, request, view):
+        if self.has_admin_permission or self.check_users_group(request, view, 'Order Manager'):
+            return True
 
 
 class IsUserManager(permissions.BasePermission, IsAdminMixin, GroupCheckMixin):

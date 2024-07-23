@@ -1,5 +1,5 @@
 from django_filters import rest_framework as filters
-from .models import Product
+from .models import Product, Order
 
 
 class ProductFilter(filters.FilterSet):
@@ -33,4 +33,13 @@ class ProductFilter(filters.FilterSet):
         
         if value == 'Good':
             return queryset.filter(inventory__gte=50)
-       
+
+
+class OrderFilter(filters.FilterSet):
+    status = filters.ChoiceFilter(choices=Order.ORDER_STATUS)
+    class Metal:
+        model = Order
+        fields = ['status']
+
+
+

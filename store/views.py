@@ -15,10 +15,10 @@ from rest_framework.viewsets import ModelViewSet
 from rest_framework.exceptions import ValidationError
 
 from .serializers import *
-from .filters import ProductFilter
+from .filters import ProductFilter, OrderFilter
 from .models import Product, Category, Comment, Cart, CartItem, Customer, Address, Order, OrderItem
 from .paginations import StandardResultSetPagination, LargeResultSetPagination
-from .permissions import IsAdminOrReadOnly, IsProductManager, IsContentManager, IsCustomerManager, IsAdmin
+from .permissions import IsAdminOrReadOnly, IsProductManager, IsContentManager, IsCustomerManager, IsAdmin, IsOrderManager
 from .throttle import AdminUserThrottle, BaseThrottleView
 
 
@@ -221,19 +221,20 @@ class AddressViewSet(ModelViewSet):
 
 # Order & OrderItem View
 class OrderViewSet(ModelViewSet):
-    filter_backends = [OrderingFilter, SearchFilter]
-    search_fields = ['customer__user__username', 'status']
-    ordering_fields = ['datetime_created', 'status']
+    filter_backends = [OrderingFilter, SearchFilter, DjangoFilterBackend]
+    filterset_class = OrderFilter
+    search_fields = ['customer__user__username']
+    ordering_fields = ['datetime_created']
     pagination_class = StandardResultSetPagination
 
     def get_queryset(self):
         queryset = Order.objects.prefetch_related(
-            Prefetch('items', queryset=OrderItem.objects.select_related('product')),
-            Prefetch('customer', queryset=Customer.objects.select_related('user').prefetch_related('address')),
-        ).order_by('datetime_created')
+            Prefetch('items', OrderItem.objects.select_related('product')),
+        ).select_related('customer').order_by('-datetime_created')
         
         user = self.request.user
-        if user.is_superuser:
+        # Order Managers and admins included
+        if user.is_staff:
             return queryset.all()
             
         return queryset.filter(customer__user_id=user.id)
@@ -244,7 +245,7 @@ class OrderViewSet(ModelViewSet):
             return OrderCreationSerializer
         
         # get serializer class based on user authentication 
-        if self.request.user.is_superuser:
+        if self.request.user.is_staff:
             return AdminOrderSerializer
         return OrderSerializer
     
@@ -274,7 +275,7 @@ class OrderViewSet(ModelViewSet):
     
     def get_permissions(self):
         if self.request.method in ['DELETE', 'PATCH', 'PUT']:
-            return [IsAdmin()]
+            return [IsOrderManager()]
         return [IsAuthenticated()]
     
     def get_throttles(self):
@@ -324,7 +325,7 @@ class PaymentProcess(APIView):
                 return Response(f"Transaction success. | RefID: {data['RefID']}.", status=status.HTTP_200_OK)
             
             elif data['Status'] == 101:
-                return Response(f"Transaction has been submitted before. | RefID: {data['RefID']}", status=status.HTTP_200_OK)
+                return Response(f"Transaction is submitted before. | RefID: {data['RefID']}", status=status.HTTP_200_OK)
             
             else:
                 return Response(f"Transaction failed. | Status: {data['Status']}", status=status.HTTP_400_BAD_REQUEST)
@@ -332,7 +333,7 @@ class PaymentProcess(APIView):
         elif payment_request_status == 'NOK':
             return Response('Transaction failed or canceled by user.', status=status.HTTP_400_BAD_REQUEST)
         
-        return Response('Enter your OrderId below to initiate the payment process.', status=status.HTTP_200_OK)
+        return Response('Enter your OrderId to initiate the payment process.', status=status.HTTP_200_OK)
     
     def post(self, request):
         serializer = PaymentSerializer(data=request.data, context={'request': request})
