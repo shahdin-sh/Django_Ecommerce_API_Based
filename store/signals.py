@@ -17,10 +17,18 @@ def reducing_order_products_inventory_after_order_creation(sender, instance, cre
     if created:
         # Reduce the product inventory based on the quantity of the OrderItem
         instance.product.inventory -= instance.quantity
+
+        if instance.product.inventory == 0:
+            instance.product.activation = False
+
         instance.product.save()
 
 
 @receiver(post_delete, sender=OrderItem)
 def restoring_order_products_inventory_after_order_deletion(instance, **kwargs):
     instance.product.inventory += instance.quantity
+
+    if instance.product.activation == False:
+        instance.product.activation = True
+
     instance.product.save()

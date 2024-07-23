@@ -10,35 +10,39 @@ from . import models
 
 
 class InventoryFilter(admin.SimpleListFilter):
-    LESS_THAN_3 = '<3'
-    BETWEEN_3_and_10 = '3<=10'
-    MORE_THAN_10 = '>10'
+    ZERO = '0'
+    LESS_THAN_10 = '<10'
+    BETWEEN_10_and_30 = '10<=30'
+    MORE_THAN_30 = '>30'
     title = 'Critical Inventory Status'
     parameter_name = 'inventory'
 
     def lookups(self, request, model_admin):
         return [
-            (InventoryFilter.LESS_THAN_3, 'High'),
-            (InventoryFilter.BETWEEN_3_and_10, 'Medium'),
-            (InventoryFilter.MORE_THAN_10, 'OK'),
+            (InventoryFilter.ZERO, 'OUT Of Stock'),
+            (InventoryFilter.LESS_THAN_10, 'High'),
+            (InventoryFilter.BETWEEN_10_and_30, 'Medium'),
+            (InventoryFilter.MORE_THAN_30, 'OK'),
         ]
     
     def queryset(self, request, queryset):
-        if self.value() == InventoryFilter.LESS_THAN_3:
-            return queryset.filter(inventory__lt=3)
-        if self.value() == InventoryFilter.BETWEEN_3_and_10:
-            return queryset.filter(inventory__range=(3, 10))
-        if self.value() == InventoryFilter.MORE_THAN_10:
-            return queryset.filter(inventory__gt=10)
+        if self.value() == InventoryFilter.ZERO:
+            return queryset.filter(inventory__exact=0)
+        if self.value() == InventoryFilter.LESS_THAN_10:
+            return queryset.filter(inventory__lt=10).order_by('inventory')
+        if self.value() == InventoryFilter.BETWEEN_10_and_30:
+            return queryset.filter(inventory__range=(10, 30)).order_by('-inventory')
+        if self.value() == InventoryFilter.MORE_THAN_30:
+            return queryset.filter(inventory__gt=30).order_by('-inventory')
 
 
 @admin.register(models.Product)
 class ProductAdmin(admin.ModelAdmin):
-    list_display = ['id', 'name', 'inventory', 'unit_price', 'inventory_status', 'product_category', 'num_of_comments']
+    list_display = ['id', 'name', 'inventory', 'unit_price', 'activation', 'inventory_status', 'product_category', 'num_of_comments']
     list_per_page = 10
     list_editable = ['unit_price']
     list_select_related = ['category']
-    list_filter = ['datetime_created', InventoryFilter]
+    list_filter = ['datetime_created', 'activation' ,InventoryFilter]
     actions = ['clear_inventory']
     search_fields = ['name', ]
     prepopulated_fields = {

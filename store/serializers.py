@@ -81,17 +81,22 @@ class ProductSerializer(serializers.ModelSerializer):
 class CartProductSerializer(serializers.ModelSerializer):
 
     detail = serializers.HyperlinkedIdentityField(view_name='product-detail', lookup_field = 'slug')
-    unit_price = serializers.CharField(source='clean_price')
+    unit_price = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
         fields = ['name', 'inventory', 'unit_price', 'detail']
     
+    TOMAN_SIGN = 'T'
+
+    def get_unit_price(self, obj:Product):
+        return f'{obj.clean_price} {self.TOMAN_SIGN}'
+    
     
 # handle cart items creation (POST request)
 class AddItemtoCartSerializer(serializers.ModelSerializer):
 
-    product = serializers.PrimaryKeyRelatedField(queryset=Product.objects.all())
+    product = serializers.PrimaryKeyRelatedField(queryset=Product.active.all())
 
     class Meta:
         model = CartItem
@@ -106,7 +111,7 @@ class AddItemtoCartSerializer(serializers.ModelSerializer):
             for item in cart.items.all():
                 cart_product_ids.append(item.product.id)
 
-            self.fields['product'].queryset = Product.objects.exclude(id__in=cart_product_ids)
+            self.fields['product'].queryset = Product.active.exclude(id__in=cart_product_ids)
         except AttributeError:
             return None
 
@@ -119,7 +124,7 @@ class AddItemtoCartSerializer(serializers.ModelSerializer):
         if quantity < 1:
             raise serializers.ValidationError('quantity must be greater or equal to 1')
         elif  quantity > product.inventory:
-            raise serializers.ValidationError(f'quantity must be less than {product.name} inventory')
+            raise serializers.ValidationError(f'quantity must be less than {product.name} inventory | < {product.inventory }')
         else:
             self.instance = CartItem.objects.create(cart_id=cart_id, **validated_data)
             return self.instance

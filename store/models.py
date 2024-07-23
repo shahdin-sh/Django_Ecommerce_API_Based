@@ -24,6 +24,11 @@ class Discount(models.Model):
         return f'{str(self.discount)} | {self.description}'
 
 
+class ActiveProductManager(models.Manager):
+    def get_queryset(self):
+        return super().get_queryset().filter(activation=True)
+
+
 class Product(models.Model):
     name = models.CharField(max_length=255)
     category = models.ForeignKey(Category, on_delete=models.PROTECT, related_name='products')
@@ -34,6 +39,10 @@ class Product(models.Model):
     datetime_created = models.DateTimeField(auto_now_add=True)
     datetime_modified = models.DateTimeField(auto_now=True)
     discounts = models.ManyToManyField(Discount, blank=True)
+    activation = models.BooleanField(default=True)
+
+    objects = models.Manager()
+    active = ActiveProductManager()
 
     def __str__(self):
         return self.name
