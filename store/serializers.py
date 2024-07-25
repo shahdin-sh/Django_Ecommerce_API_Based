@@ -6,14 +6,26 @@ from django.utils.text import slugify
 
 from .models import Product, Category, Comment, Cart, CartItem, Customer, Address, Order, OrderItem
 
+class CategoryProductsSerializer(serializers.ModelSerializer):
+    unit_price = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Product
+        fields = ['name', 'unit_price', 'inventory']
+
+    TOMAN_SIGN = 'T'
+
+    def get_unit_price(self, obj:Product):
+        return f'{obj.clean_price} {self.TOMAN_SIGN}'
 
 class CategorySerializer(serializers.ModelSerializer):
     detail = serializers.HyperlinkedIdentityField(view_name = 'category-detail', lookup_field = 'slug')
     num_of_products = serializers.IntegerField(source='products_count', read_only=True)
+    products = CategoryProductsSerializer(many=True, read_only=True)
 
     class Meta:
         model = Category
-        fields = ['title', 'description', 'num_of_products', 'detail']
+        fields = ['title', 'description', 'num_of_products', 'detail', 'products']
 
     # for POST HTTP Method
     def create(self, validated_data):
