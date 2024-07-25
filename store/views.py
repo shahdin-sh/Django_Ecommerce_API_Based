@@ -63,7 +63,7 @@ class CategoryViewSet(ModelViewSet):
     queryset = Category.objects.all().annotate(
             # with annotate method, products_count is known as a Category field when this view is called.
             products_count = Count('products')
-        )
+        ).prefetch_related('products').order_by('-products_count')
     filter_backend = [SearchFilter, DjangoFilterBackend]
     search_fields = ['title']
     filterset_fields  = ['title']
