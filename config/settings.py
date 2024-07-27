@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     'debug_toolbar',
     'django_filters',
     'phonenumber_field',
+    'drf_yasg'
 ]
 
 MIDDLEWARE = [

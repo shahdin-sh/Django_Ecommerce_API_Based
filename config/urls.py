@@ -19,6 +19,12 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 
+from drf_yasg import openapi
+from drf_yasg.views import get_schema_view
+from rest_framework import permissions
+
+from .schema import schema_view
+
 import debug_toolbar
 
 urlpatterns = [
@@ -28,6 +34,9 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api-auth/', include('rest_framework.urls')),
     path('__debug__/', include(debug_toolbar.urls)),
+    # schemas endpoits  
+    path('schema-swagger', schema_view.with_ui('swagger', cache_timeout=0), name='store-schema-swagger'),
+    path('schema-redoc', schema_view.with_ui('redoc', cache_timeout=0), name='store-schema-redoc')
 ]
 
 # Serve static and media files during production
