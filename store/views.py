@@ -96,7 +96,7 @@ class CommentViewSet(ModelViewSet):
 
     def get_queryset(self):
         return Comment.objects.select_related('product').filter(
-            product__slug=self.kwargs['product_slug']).all()
+            product__slug=self.kwargs['product_slug'], status=Comment.COMMENT_STATUS_APPROVED).order_by('-datetime_created')
     
     def get_serializer_context(self):
         context = {
