@@ -115,7 +115,7 @@ class CartViewSet(ModelViewSet):
     serializer_class = CartSerializer
     queryset = Cart.objects.prefetch_related(
         Prefetch('items', queryset=CartItem.objects.select_related('product'))
-        ).all()
+        ).all().order_by('-created_at')
     lookup_field = 'id'
     pagination_class = StandardResultSetPagination
     permission_classes = [IsAuthenticated]
