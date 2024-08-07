@@ -111,7 +111,7 @@ class CommentViewSet(ModelViewSet):
 
 # Cart View
 class CartViewSet(ModelViewSet):
-    http_method_names = ['get', 'post', 'delete']
+    http_method_names = ['get', 'post', 'options', 'head',  'delete', ]
     serializer_class = CartSerializer
     queryset = Cart.objects.prefetch_related(
         Prefetch('items', queryset=CartItem.objects.select_related('product'))

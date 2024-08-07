@@ -1,4 +1,5 @@
 from rest_framework import status
+from rest_framework.exceptions import ValidationError
 from rest_framework.reverse import reverse
 from rest_framework.test import APITestCase, APIClient
 
@@ -63,16 +64,33 @@ class GenerateAuthToken:
 
 # Test Cases
 class AllowedHttpMethodTests(APITestCase):
-    def __init__(self, test_case):
-        self.test_case = test_case
-        self.all_http_methods = ['GET', 'POST', 'OPTIONS', 'HEAD']
+    LIST_HTTP_METHODS = ['GET', 'POST', 'OPTIONS', 'HEAD']
+    DETAIL_HTTP_METHODS = ['GET', 'OPTIONS', 'HEAD', 'PUT', 'PATCH', 'DELETE']
 
-    def check_allowed_methods(self, url, expected_methods:None):
-        response = self.test_case.client.options(url)
+    def __init__(self, test_case, **kwargs):
+        super().__init__()
+        self.test_case = test_case
+        self.client = APIClient()
+
+    def check_allowed_methods(self, url: str, expected_methods: list = None, auth_token: str = None):
+        if auth_token:
+            self.client.defaults['HTTP_AUTHORIZATION'] = f'JWT {auth_token}'
+
+        response = self.client.options(url)
+        if response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED:
+            raise ValidationError("OPTIONS method not allowed; cannot test other methods.")
+        
         self.test_case.assertEqual(response.status_code, status.HTTP_200_OK)
+
         allowed_methods = response['allow'].split(', ')
-        if expected_methods is None:
-            expected_methods = self.all_http_methods
+
+        if not expected_methods:
+            url_name = resolve(url).url_name
+            if 'list' in url_name:
+                expected_methods = self.LIST_HTTP_METHODS
+            elif 'detail' in url_name:
+                expected_methods = self.DETAIL_HTTP_METHODS
+
         self.test_case.assertEqual(set(allowed_methods), set(expected_methods))
 
 
@@ -95,12 +113,12 @@ class ProductUrlTests(APITestCase):
         self.comment_manager_group = Group.objects.create(name='Content Manager')
 
     def test_category_urls_http_methods(self):
-        url = self.category_list_url
-        self.allowed_http_methods.check_allowed_methods(url, expected_methods=None)
+        self.allowed_http_methods.check_allowed_methods(self.category_list_url)
+        self.allowed_http_methods.check_allowed_methods(self.category_detail_url)
 
     def test_category_url_resolves(self):
-        url = self.category_list_url
-        self.assertEqual(resolve(url).func.cls, CategoryViewSet)
+        self.assertEqual(resolve(self.category_list_url).func.cls, CategoryViewSet)
+        self.assertEqual(resolve(self.category_detail_url).func.cls, CategoryViewSet)
 
     def test_category_list_url(self):
         response = self.client.get(self.category_list_url)
@@ -112,13 +130,12 @@ class ProductUrlTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
     
     def test_product_urls_http_methods(self):
-        # http methods for both list and detail is the same
-        url = self.product_list_url
-        self.allowed_http_methods.check_allowed_methods(url, expected_methods=None)
+        self.allowed_http_methods.check_allowed_methods(self.product_list_url)
+        self.allowed_http_methods.check_allowed_methods(self.product_detail_url)
     
     def test_product_url_resolves(self):
-        url = self.product_list_url
-        self.assertEqual(resolve(url).func.cls, ProductViewSet)
+        self.assertEqual(resolve(self.product_list_url).func.cls, ProductViewSet)
+        self.assertEqual(resolve(self.product_detail_url).func.cls, ProductViewSet)
     
     def test_product_list_url(self):
         response = self.client.get(self.product_list_url)
@@ -130,12 +147,12 @@ class ProductUrlTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
     
     def test_comment_urls_http_methods(self):
-        url = self.comment_list_url
-        self.allowed_http_methods.check_allowed_methods(url, expected_methods=None)
+        self.allowed_http_methods.check_allowed_methods(self.comment_list_url)
+        self.allowed_http_methods.check_allowed_methods(self.comment_detail_url)
 
     def test_comment_url_resolves(self):
-        url = self.comment_list_url
-        self.assertEqual(resolve(url).func.cls, CommentViewSet)
+        self.assertEqual(resolve(self.comment_list_url).func.cls, CommentViewSet)
+        self.assertEqual(resolve(self.comment_detail_url).func.cls, CommentViewSet)
     
     def test_comment_list_url(self):
         response = self.client.get(self.comment_list_url)
@@ -161,11 +178,22 @@ class CartUrlTests(APITestCase):
         self.cartitems_list_url = self.cart_detail_url + 'items/'
         self.cartitems_detail_url = self.cart_detail_url + f'items/{self.cartitems.id}'
 
+    def test_url_without_authorization_header(self):
+        cart_list_res = self.api_client.get(self.cart_list_url)
+        self.assertEqual(cart_list_res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        cart_detail_res = self.api_client.get(self.cart_detail_url)
+        self.assertEqual(cart_detail_res.status_code, status.HTTP_401_UNAUTHORIZED)
+
     def test_cart_urls_https_methods(self):
-        pass
+        self.allowed_http_methods.check_allowed_methods(self.cart_list_url, auth_token=self.auth_token)
+        expected_methods = ['GET', 'OPTIONS', 'HEAD', 'DELETE']
+        self.allowed_http_methods.check_allowed_methods(self.cart_detail_url, expected_methods=expected_methods, auth_token=self.auth_token)
 
     def test_cart_url_resolves(self):
-        pass
+        self.api_client.defaults['HTTP_AUTHORIZATION'] = f'JWT {self.auth_token}'
+        self.assertEqual(resolve(self.cart_list_url).func.cls, CartViewSet)
+        self.assertEqual(resolve(self.cart_detail_url).func.cls, CartViewSet)
 
     def test_cart_list_url(self):
         self.api_client.defaults['HTTP_AUTHORIZATION'] = f'JWT {self.auth_token}'
@@ -173,4 +201,6 @@ class CartUrlTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
     
     def test_cart_detail_url(self):
-        pass
+        self.api_client.defaults['HTTP_AUTHORIZATION'] = f'JWT {self.auth_token}'
+        response = self.api_client.get(self.cart_detail_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
