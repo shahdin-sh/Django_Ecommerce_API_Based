@@ -90,7 +90,6 @@ class AllowedHttpMethodTests(APITestCase):
                 expected_methods = self.LIST_HTTP_METHODS
             elif 'detail' in url_name:
                 expected_methods = self.DETAIL_HTTP_METHODS
-
         self.test_case.assertEqual(set(allowed_methods), set(expected_methods))
 
 
@@ -116,7 +115,7 @@ class ProductUrlTests(APITestCase):
         self.allowed_http_methods.check_allowed_methods(self.category_list_url)
         self.allowed_http_methods.check_allowed_methods(self.category_detail_url)
 
-    def test_category_url_resolves(self):
+    def test_category_urls_resolves(self):
         self.assertEqual(resolve(self.category_list_url).func.cls, CategoryViewSet)
         self.assertEqual(resolve(self.category_detail_url).func.cls, CategoryViewSet)
 
@@ -133,7 +132,7 @@ class ProductUrlTests(APITestCase):
         self.allowed_http_methods.check_allowed_methods(self.product_list_url)
         self.allowed_http_methods.check_allowed_methods(self.product_detail_url)
     
-    def test_product_url_resolves(self):
+    def test_product_urls_resolves(self):
         self.assertEqual(resolve(self.product_list_url).func.cls, ProductViewSet)
         self.assertEqual(resolve(self.product_detail_url).func.cls, ProductViewSet)
     
@@ -150,7 +149,7 @@ class ProductUrlTests(APITestCase):
         self.allowed_http_methods.check_allowed_methods(self.comment_list_url)
         self.allowed_http_methods.check_allowed_methods(self.comment_detail_url)
 
-    def test_comment_url_resolves(self):
+    def test_comment_urls_resolves(self):
         self.assertEqual(resolve(self.comment_list_url).func.cls, CommentViewSet)
         self.assertEqual(resolve(self.comment_detail_url).func.cls, CommentViewSet)
     
@@ -176,7 +175,7 @@ class CartUrlTests(APITestCase):
         self.cart_list_url = reverse('cart-list')
         self.cart_detail_url = reverse('cart-detail', args=[self.cart.id])
         self.cartitems_list_url = self.cart_detail_url + 'items/'
-        self.cartitems_detail_url = self.cart_detail_url + f'items/{self.cartitems.id}'
+        self.cartitems_detail_url = self.cart_detail_url + f'items/{self.cartitems.id}/'
 
     def test_url_without_authorization_header(self):
         cart_list_res = self.api_client.get(self.cart_list_url)
@@ -204,3 +203,33 @@ class CartUrlTests(APITestCase):
         self.api_client.defaults['HTTP_AUTHORIZATION'] = f'JWT {self.auth_token}'
         response = self.api_client.get(self.cart_detail_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+    
+    def test_cartitms_without_authorization_header(self):
+        list_url = self.api_client.get(self.cart_list_url)
+        self.assertEqual(list_url.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        detail_url = self.api_client.get(self.cart_detail_url)
+        self.assertEqual(detail_url.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_cartitems_urls_http_methods(self):
+        self.allowed_http_methods.check_allowed_methods(url=self.cartitems_list_url, auth_token=self.auth_token)
+        expected_methods =  ['GET', 'PUT', 'DELETE', 'OPTIONS', 'HEAD']
+        self.allowed_http_methods.check_allowed_methods(url=self.cartitems_detail_url, expected_methods=expected_methods, auth_token=self.auth_token)
+
+    def test_cartitems_urls_resolves(self):
+        self.api_client.defaults['HTTP_AUTHORIZATION'] = f'JWT {self.auth_token}'
+        self.assertEqual(resolve(self.cartitems_list_url).func.cls, CartItemViewSet)
+        self.assertEqual(resolve(self.cartitems_detail_url).func.cls, CartItemViewSet)
+
+
+    def test_cartitems_list_url(self):
+        self.api_client.defaults['HTTP_AUTHORIZATION'] = f'JWT {self.auth_token}'
+        response = self.api_client.get(self.cart_list_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_cartitems_detail_url(self):
+        self.api_client.defaults['HTTP_AUTHORIZATION'] = f'JWT {self.auth_token}'
+        response = self.api_client.get(self.cartitems_detail_url)
+        print(response.content)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        

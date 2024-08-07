@@ -152,12 +152,16 @@ class CartItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = CartItem
         fields = ['id', 'product', 'quantity', 'current_product_stock', 'total_price']
-        read_only_fields = ['quantity']
 
     TOMAN_SIGN = 'T'
 
     def get_current_product_stock(self, obj:CartItem):
-        return obj.product.inventory - obj.quantity 
+        invenory = obj.product.inventory
+        quantity = obj.quantity
+        
+        if invenory > quantity:
+            return obj.product.inventory - obj.quantity 
+        return 'Out of Stock'
 
     def get_total_price(self, obj:CartItem):
         total_price = (obj.quantity * obj.product.unit_price)

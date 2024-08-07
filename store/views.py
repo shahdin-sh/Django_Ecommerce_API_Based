@@ -111,7 +111,7 @@ class CommentViewSet(ModelViewSet):
 
 # Cart View
 class CartViewSet(ModelViewSet):
-    http_method_names = ['get', 'post', 'options', 'head',  'delete', ]
+    http_method_names = ['get', 'post', 'delete', 'options', 'head']
     serializer_class = CartSerializer
     queryset = Cart.objects.prefetch_related(
         Prefetch('items', queryset=CartItem.objects.select_related('product'))
@@ -126,7 +126,7 @@ class CartViewSet(ModelViewSet):
 
 
 class CartItemViewSet(ModelViewSet):
-    http_method_names = ['get', 'post', 'put', 'delete']
+    http_method_names = ['get', 'post', 'put', 'delete', 'options', 'head']
     permission_classes = [IsAuthenticated]
 
     def get_serializer_class(self):
