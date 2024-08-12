@@ -57,7 +57,11 @@ class Customer(models.Model):
     birth_date = models.DateField(null=True, blank=True)
 
     def __str__(self):
-        return f'{self.user.first_name} {self.user.last_name}'
+        user = self.user
+        
+        if user.first_name and user.last_name:
+            return f'{user.first_name} {user.last_name}' 
+        return f'{user.username}'
     
     class Meta:
         permissions = [

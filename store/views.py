@@ -15,7 +15,7 @@ from rest_framework.viewsets import ModelViewSet
 from rest_framework.exceptions import ValidationError
 
 from .serializers import *
-from .filters import ProductFilter, OrderFilter
+from .filters import ProductFilter, OrderFilter, CustomerWithOutAddress
 from .models import Product, Category, Comment, Cart, CartItem, Customer, Address, Order, OrderItem
 from .paginations import StandardResultSetPagination, LargeResultSetPagination
 from .permissions import IsAdminOrReadOnly, IsProductManager, IsContentManager, IsCustomerManager, IsAdmin, IsOrderManager
@@ -157,17 +157,21 @@ class CartItemViewSet(ModelViewSet):
 
 # Customer & Address View
 class CustomerViewSet(ModelViewSet):
-    # each new user has customer model so post m`ethod is not allowed
+    # each new user has customer model so post method is not allowed
     http_method_names = ['get', 'put', 'head', 'options']
     serializer_class = ManagerCustomerSerializer
-    queryset = Customer.objects.select_related('user').prefetch_related('address').all()
+    queryset = Customer.objects.select_related('user').prefetch_related('address').order_by('id')
+    filter_backends = [SearchFilter, DjangoFilterBackend]
+    filterset_class = CustomerWithOutAddress
+    search_fields = ['user__username']
+    pagination_class = StandardResultSetPagination
     permission_classes = [IsCustomerManager]
 
     @action(detail=False, methods=['GET', 'PUT', 'HEAD', 'OPTIONS'], permission_classes=[IsAuthenticated])
     def me(self, request):
+         # no need of get_object_or_404 because of customer creation signal for newly signed up users
         customer = Customer.objects.select_related('user').get(user=request.user)
         if request.method == 'GET':
-            # no need of get_object_or_404 because of customer creation signal for newly signed up users
             serializer = CustomerSerializer(customer, context={'request': request})
             return Response(serializer.data, status=status.HTTP_200_OK)
         
@@ -183,7 +187,7 @@ class CustomerViewSet(ModelViewSet):
         elif request.method == 'OPTIONS':
             # Respond with allowed methods and other OPTIONS-related headers
             return Response(status=status.HTTP_200_OK)
-    
+         
     # @action(detail=True, methods=['GET'])
     # def send_private_email(self, request, pk):
     #     target_customer = Customer.objects.get(pk=pk)
@@ -195,33 +199,35 @@ class CustomerViewSet(ModelViewSet):
 
 
 class AddressViewSet(ModelViewSet):
+    filter_backends = [SearchFilter]
+    search_fields = ['customer__user__username']
+    pagination_class = StandardResultSetPagination
+
     def get_queryset(self):
-        queryset = Address.objects.select_related('customer').order_by('customer__user__username')
-        # including admins and customer managers
-        if self.request.user.is_staff:
+        queryset = Address.objects.select_related('customer__user').order_by('pk')
+        user = self.request.user
+
+        if user.is_superuser or user.groups.filter(name='Customer Manager').exists():
             return queryset.all()
-        # including authenticated users
-        user_queryset = queryset.filter(customer__user=self.request.user)
-        if user_queryset.exists():
-            return user_queryset
-        return user_queryset.none()
+        
+        queryset = queryset.filter(customer__user=user)
+        return queryset
 
     def get_serializer_class(self):
-        if self.request.user.is_superuser or self.request.user.groups.filter(name='Customer Manager').exists():
-            if self.request.method == 'POST':
-                return ManagersAddAddressSerializer
-            return ManagerAddressSerializer
-        
+        user = self.request.user
+        is_manager = user.is_superuser or user.groups.filter(name='Customer Manager').exists()
+
         if self.request.method == 'POST':
-            return AddAddressSerializer
-        return AddressSerializer
-        
+            return ManagersAddAddressSerializer if is_manager else AddAddressSerializer
+
+        return ManagerAddressSerializer if is_manager else AddressSerializer
+            
     def get_permissions(self):
-        if self.request.method in ['DELETE']:
+        if self.request.method == 'DELETE':
             return [IsCustomerManager()]
         return [IsAuthenticated()]
     
-    def get_throttles(self):
+    def get_throttles(self):    
         self.throttle_scope = 'address'
         return base_throttle.get_throttles(self.request, throttle_scope=self.throttle_scope, group_name='Customer Manager')
     

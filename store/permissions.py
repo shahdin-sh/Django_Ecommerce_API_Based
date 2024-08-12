@@ -49,7 +49,7 @@ class IsCustomerManager(permissions.BasePermission, IsAdminMixin, GroupCheckMixi
         if self.has_admin_permission(request, view) or self.check_users_group(request, view, 'Customer Manager'):
             return True
         
-        return bool(request.user and request.user.has_perm('store.send_private_email'))
+        # return bool(request.user and request.user.has_perm('store.send_private_email'))
 
 
 class IsOrderManager(permissions.BasePermission, IsAdminMixin, GroupCheckMixin):

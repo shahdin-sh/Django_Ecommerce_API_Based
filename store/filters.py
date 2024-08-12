@@ -1,5 +1,5 @@
 from django_filters import rest_framework as filters
-from .models import Product, Order
+from .models import Product, Order, Customer
 
 
 class ProductFilter(filters.FilterSet):
@@ -35,11 +35,29 @@ class ProductFilter(filters.FilterSet):
             return queryset.filter(inventory__gte=50)
 
 
+class CustomerWithOutAddress(filters.FilterSet):
+    no_address = filters.BooleanFilter(
+        method='filter_no_address',
+        label = 'No Address'
+    )
+
+    class Meta:
+        model = Customer
+        fields = ['no_address']
+    
+    def filter_no_address(self, queryset, name, value):
+        if value:
+            return queryset.filter(address__isnull=True)
+        return queryset.all()
+
+
 class OrderFilter(filters.FilterSet):
     status = filters.ChoiceFilter(choices=Order.ORDER_STATUS)
-    class Metal:
+
+    class Meta:
         model = Order
         fields = ['status']
+
 
 
 

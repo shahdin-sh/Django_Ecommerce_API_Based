@@ -1,10 +1,12 @@
 from rest_framework import serializers
+from rest_framework.reverse import reverse
 
 from django.db import transaction 
 from django.db.models import Count
 from django.utils.text import slugify
 
 from .models import Product, Category, Comment, Cart, CartItem, Customer, Address, Order, OrderItem
+
 
 class CategoryProductsSerializer(serializers.ModelSerializer):
     unit_price = serializers.SerializerMethodField()
@@ -17,6 +19,7 @@ class CategoryProductsSerializer(serializers.ModelSerializer):
 
     def get_unit_price(self, obj:Product):
         return f'{obj.clean_price} {self.TOMAN_SIGN}'
+
 
 class CategorySerializer(serializers.ModelSerializer):
     detail = serializers.HyperlinkedIdentityField(view_name = 'category-detail', lookup_field = 'slug')
@@ -197,9 +200,11 @@ class CartSerializer(serializers.ModelSerializer):
 
 # Address Serializers
 class AddressSerializer(serializers.ModelSerializer):
+    detail = serializers.HyperlinkedIdentityField(view_name='address-detail', lookup_field='pk')
+
     class Meta:
         model = Address
-        fields = ['province', 'city', 'street']
+        fields = ['province', 'city', 'street', 'detail']
 
 
 class AddAddressSerializer(serializers.ModelSerializer):
@@ -222,15 +227,19 @@ class AddAddressSerializer(serializers.ModelSerializer):
         address = Address.objects.create(customer=customer, **validated_data)
         self.instance = address
         return address    
-
+    
 
 class ManagerAddressSerializer(serializers.ModelSerializer):
+    user = serializers.SerializerMethodField()
     customer = serializers.HyperlinkedRelatedField(view_name='customer-detail', lookup_field='pk', read_only=True)
     detail = serializers.HyperlinkedIdentityField(view_name='address-detail', lookup_field='pk')
 
     class Meta:
         model = Address
-        fields = ['detail', 'customer', 'province', 'city', 'street']
+        fields = ['pk', 'user', 'detail', 'customer', 'province', 'city', 'street']
+
+    def get_user(self, obj:Address):
+        return obj.customer.user.username
 
 
 class ManagersAddAddressSerializer(serializers.ModelSerializer):
@@ -243,37 +252,62 @@ class ManagersAddAddressSerializer(serializers.ModelSerializer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args,**kwargs)
         # Filter customers who do not have any associated addresses
-        self.fields['customer'].queryset = Customer.objects.annotate(address_count=Count('address')).filter(address_count__lt=1)
+        self.fields['customer'].queryset = Customer.objects.filter(address__isnull=True).distinct()
 
 
 # Customer Serializers
 class CustomerAddressSerializer(serializers.ModelSerializer):
-
     class Meta:
         model = Address
         fields = ['province', 'city', 'street']
-    
-    
-class ManagerCustomerSerializer(serializers.ModelSerializer):
 
-    address = CustomerAddressSerializer(read_only=True)
+
+class ManagerCustomerSerializer(serializers.ModelSerializer):
     user = serializers.SerializerMethodField()
+    address = CustomerAddressSerializer(read_only=True)
+    address_creation_endpoint = serializers.SerializerMethodField()
 
     class Meta:
         model = Customer
-        fields = ['id', 'user', 'birth_date', 'address']
+        fields = ['id', 'user', 'birth_date', 'address', 'address_creation_endpoint']
     
     def get_user(self, obj:Customer):
         return obj.user.username
+    
+    def get_address_creation_endpoint(self, obj:Customer):
+        search_url = 'http://127.0.0.1:8000' + reverse('address-list') + f'?search={obj.user.username}'
+        address = Address.objects.filter(customer=obj)
+        
+        if address.exists():
+            return None
+        return search_url 
+    
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        address = Address.objects.filter(customer=instance)
 
+        if address.exists():
+            representation.pop('address_creation_endpoint', None)
+
+        return representation
+    
 
 class CustomerSerializer(serializers.ModelSerializer):
     address = CustomerAddressSerializer(read_only=True)
-    address_info = serializers.HyperlinkedIdentityField(view_name='address-detail', lookup_field='pk', read_only=True)
+    address_info = serializers.SerializerMethodField()
 
     class Meta:
         model = Customer
         fields = ['birth_date', 'address', 'address_info']
+    
+    def get_address_info(self, obj:Customer):
+        url = 'http://127.0.0.1:8000' + reverse('address-list')
+        address = Address.objects.filter(customer=obj)
+
+        if address.exists():
+            return url + f'{obj.id}/'
+        
+        return url + f'?search={obj.user.username}'
 
 
 class CustomerOrderSerializer(serializers.ModelSerializer):
