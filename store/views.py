@@ -157,30 +157,37 @@ class CartItemViewSet(ModelViewSet):
 
 # Customer & Address View
 class CustomerViewSet(ModelViewSet):
-    # each new user has customer model so post method is not allowed
-    http_method_names = ['get', 'put']
-    serializer_class = CustomerSerializer
+    # each new user has customer model so post m`ethod is not allowed
+    http_method_names = ['get', 'put', 'head', 'options']
+    serializer_class = ManagerCustomerSerializer
     queryset = Customer.objects.select_related('user').prefetch_related('address').all()
     permission_classes = [IsCustomerManager]
 
-    @action(detail=False, methods=['GET', 'PUT', 'DELETE'], permission_classes=[IsAuthenticated])
+    @action(detail=False, methods=['GET', 'PUT', 'HEAD', 'OPTIONS'], permission_classes=[IsAuthenticated])
     def me(self, request):
         customer = Customer.objects.select_related('user').get(user=request.user)
         if request.method == 'GET':
             # no need of get_object_or_404 because of customer creation signal for newly signed up users
-            serializer = CustomerSerializer(customer)
-            return Response(serializer.data)
+            serializer = CustomerSerializer(customer, context={'request': request})
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        
         elif request.method == 'PUT':
-            serializer = CustomerSerializer(customer, request.data)
+            serializer = CustomerSerializer(customer, request.data, context={'request': request})
             serializer.is_valid(raise_exception=True)
-
             serializer.save()
             return Response(status=status.HTTP_200_OK)
+        
+        elif request.method == 'HEAD':
+            return Response(status=status.HTTP_200_OK)
+        
+        elif request.method == 'OPTIONS':
+            # Respond with allowed methods and other OPTIONS-related headers
+            return Response(status=status.HTTP_200_OK)
     
-    @action(detail=True, methods=['GET'])
-    def send_private_email(self, request, pk):
-        target_customer = Customer.objects.get(pk=pk)
-        return Response(f'send private email to {target_customer.user.username} by {request.user.username}')
+    # @action(detail=True, methods=['GET'])
+    # def send_private_email(self, request, pk):
+    #     target_customer = Customer.objects.get(pk=pk)
+    #     return Response(f'send private email to {target_customer.user.username} by {request.user.username}')
 
     def get_throttles(self):
       self.throttle_scope = 'customer'

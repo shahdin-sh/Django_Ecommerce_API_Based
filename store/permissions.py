@@ -68,3 +68,6 @@ class IsUserManager(permissions.BasePermission, IsAdminMixin, GroupCheckMixin):
 #     def __init__(self):
 #         self.perms_map['GET'] = deepcopy(self.perms_map['GET'])
 #         self.perms_map['GET'] = ['%(app_label)s.view_%(model_name)s']
+
+
+# QUERY OPTIMIZATION REQUIRED

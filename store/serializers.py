@@ -199,7 +199,7 @@ class CartSerializer(serializers.ModelSerializer):
 class AddressSerializer(serializers.ModelSerializer):
     class Meta:
         model = Address
-        fields = ['pk', 'province', 'city', 'street']
+        fields = ['province', 'city', 'street']
 
 
 class AddAddressSerializer(serializers.ModelSerializer):
@@ -254,7 +254,7 @@ class CustomerAddressSerializer(serializers.ModelSerializer):
         fields = ['province', 'city', 'street']
     
     
-class CustomerSerializer(serializers.ModelSerializer):
+class ManagerCustomerSerializer(serializers.ModelSerializer):
 
     address = CustomerAddressSerializer(read_only=True)
     user = serializers.SerializerMethodField()
@@ -265,6 +265,15 @@ class CustomerSerializer(serializers.ModelSerializer):
     
     def get_user(self, obj:Customer):
         return obj.user.username
+
+
+class CustomerSerializer(serializers.ModelSerializer):
+    address = CustomerAddressSerializer(read_only=True)
+    address_info = serializers.HyperlinkedIdentityField(view_name='address-detail', lookup_field='pk', read_only=True)
+
+    class Meta:
+        model = Customer
+        fields = ['birth_date', 'address', 'address_info']
 
 
 class CustomerOrderSerializer(serializers.ModelSerializer):
