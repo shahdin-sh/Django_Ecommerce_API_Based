@@ -8,7 +8,18 @@ from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
 from django.urls import resolve
 
-from ..models import *
+from ..models import (
+    Category,
+    Product,
+    Comment,
+    Cart,
+    CartItem,
+    Customer,
+    Address,
+    Order,
+    OrderItem
+)
+
 from ..views import (
     CategoryViewSet, 
     ProductViewSet, 
@@ -16,8 +27,9 @@ from ..views import (
     CartViewSet, 
     CartItemViewSet, 
     CustomerViewSet,
-    AddressViewSet
-    )
+    AddressViewSet,
+    OrderViewSet,
+)
 
 
 User = get_user_model()
@@ -63,14 +75,28 @@ class MockObjects:
             city = 'city B',
             street = 'street number 1'
         )
+        self.order_obj = Order.objects.create(
+            customer = self.customer_obj,
+            status = Order.ORDER_STATUS_UNPAID
+        )
+        self.orderitems_obj = OrderItem.objects.create(
+            order = self.order_obj,
+            product = self.product_obj,
+            quantity = 3,
+            unit_price = self.cartitems_obj.product.unit_price
+        )
 
 
 class GenerateAuthToken:
-    def generate_auth_token(self, client, username='username', password='user123'):
+    def __init__(self):
+        super().__init__()
+        self.api_client = APIClient()
+
+    def generate_auth_token(self, username='username', password='user123'):
         url = reverse('jwt-create')
         # Can not use mock_objs dut to duplicated key value violated unique constraint error , username=username
         credentials = {'username': username, 'password': password}
-        response = client.post(url, credentials, format='json')
+        response = self.api_client.post(url, credentials, format='json')
         if response.status_code == status.HTTP_200_OK:
             try:
                 access_token = response.data['access']
@@ -85,10 +111,9 @@ class AllowedHttpMethodTests(APITestCase):
     LIST_HTTP_METHODS = ['GET', 'POST', 'OPTIONS', 'HEAD']
     DETAIL_HTTP_METHODS = ['GET', 'OPTIONS', 'HEAD', 'PUT', 'PATCH', 'DELETE']
 
-    def __init__(self, test_case, **kwargs):
+    def __init__(self):
         super().__init__()
-        self.test_case = test_case
-        self.client = APIClient()
+        self.api_client = APIClient()
 
     def check_allowed_methods(self, url: str, expected_methods: list = None, auth_token: str = None):
         """
@@ -103,13 +128,13 @@ class AllowedHttpMethodTests(APITestCase):
         - ValidationError: If OPTIONS method is not allowed or unexpected response status.
         """
         if auth_token:
-            self.client.defaults['HTTP_AUTHORIZATION'] = f'JWT {auth_token}'
+            self.api_client.defaults['HTTP_AUTHORIZATION'] = f'JWT {auth_token}'
 
-        response = self.client.options(url)
+        response = self.api_client.options(url)
         if response.status_code == status.HTTP_405_METHOD_NOT_ALLOWED:
             raise ValidationError("OPTIONS method not allowed; cannot test allowed HTTP methods.")
         
-        self.test_case.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         allowed_methods = response['allow'].split(', ')
 
@@ -119,13 +144,14 @@ class AllowedHttpMethodTests(APITestCase):
                 expected_methods = self.LIST_HTTP_METHODS
             elif 'detail' in url_name:
                 expected_methods = self.DETAIL_HTTP_METHODS
-        self.test_case.assertEqual(set(allowed_methods), set(expected_methods))
+        self.assertEqual(set(allowed_methods), set(expected_methods))
 
 
-class ProductUrlTests(APITestCase):
+class ProductUrlsTests(APITestCase):
     def setUp(self):
+        self.api_client = APIClient()
         self.mock_objs = MockObjects() # Instantiate MockObjects
-        self.allowed_http_methods = AllowedHttpMethodTests(self)
+        self.allowed_http_methods = AllowedHttpMethodTests()
         self.category = self.mock_objs.category_obj
         self.product = self.mock_objs.product_obj
         self.comment = self.mock_objs.comment_obj
@@ -149,12 +175,12 @@ class ProductUrlTests(APITestCase):
         self.assertEqual(resolve(self.category_detail_url).func.cls, CategoryViewSet)
 
     def test_category_list_url(self):
-        response = self.client.get(self.category_list_url)
+        response = self.api_client.get(self.category_list_url)
         self.assertTrue(response.json().get('count') > 0)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
     
     def test_category_detail_url(self):
-        response = self.client.get(self.category_detail_url)
+        response = self.api_client.get(self.category_detail_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
     
     def test_product_urls_http_methods(self):
@@ -166,12 +192,12 @@ class ProductUrlTests(APITestCase):
         self.assertEqual(resolve(self.product_detail_url).func.cls, ProductViewSet)
     
     def test_product_list_url(self):
-        response = self.client.get(self.product_list_url)
+        response = self.api_client.get(self.product_list_url)
         self.assertTrue(response.json().get('count') > 0)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
     
     def test_product_detail_url(self):                            
-        response = self.client.get(self.product_detail_url)
+        response = self.api_client.get(self.product_detail_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
     
     def test_comment_urls_http_methods(self):
@@ -183,21 +209,21 @@ class ProductUrlTests(APITestCase):
         self.assertEqual(resolve(self.comment_detail_url).func.cls, CommentViewSet)
     
     def test_comment_list_url(self):
-        response = self.client.get(self.comment_list_url)
+        response = self.api_client.get(self.comment_list_url)
         self.assertTrue(response.json().get('count') > 0)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
     
     def test_comment_detail_url(self):
-        response = self.client.get(self.comment_detail_url)
+        response = self.api_client.get(self.comment_detail_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
 
-class CartUrlTests(APITestCase):
+class CartUrlsTests(APITestCase):
     def setUp(self):
         self.api_client = APIClient()
         self.mock_objs = MockObjects() # Instantiate MockObjects
-        self.auth_token = GenerateAuthToken().generate_auth_token(client=self.client)
-        self.allowed_http_methods = AllowedHttpMethodTests(self)
+        self.auth_token = GenerateAuthToken().generate_auth_token()
+        self.allowed_http_methods = AllowedHttpMethodTests()
         self.user = self.mock_objs.user_obj
         self.cart = self.mock_objs.cart_obj
         self.cartitems = self.mock_objs.cartitems_obj
@@ -267,12 +293,12 @@ class CartUrlTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
 
-class CustomerUrlTests(APITestCase):
+class CustomerUrlsTests(APITestCase):
     def setUp(self):
         self.api_client = APIClient()
         self.mock_objs = MockObjects()
-        self.auth_token = GenerateAuthToken().generate_auth_token(client=self.client)
-        self.allowed_http_methods = AllowedHttpMethodTests(self)
+        self.auth_token = GenerateAuthToken().generate_auth_token()
+        self.allowed_http_methods = AllowedHttpMethodTests()
         self.user = self.mock_objs.user_obj
         self.customer = self.mock_objs.customer_obj
         self.address = self.mock_objs.address_obj
@@ -388,4 +414,63 @@ class CustomerUrlTests(APITestCase):
         self.set_authorization_header()
         response = self.api_client.get(self.address_detail_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        
+
+
+class OrderUrlsTests(APITestCase):
+    def setUp(self):
+        self.api_client = APIClient()
+        self.mock_objs = MockObjects()
+        self.auth_token = GenerateAuthToken().generate_auth_token()
+        self.allowed_http_methods = AllowedHttpMethodTests()
+        self.order = self.mock_objs.order_obj
+        self.orderitems = self.mock_objs.orderitems_obj
+        self.order_list_url = reverse('order-list')
+        self.order_detail_url = reverse('order-detail', args=[self.order.id])
+
+        Group.objects.create(name='Order Manager')
+    
+    def set_authorization_header(self):
+        self.api_client.defaults['HTTP_AUTHORIZATION'] = f'JWT {self.auth_token}'
+    
+    # Test Methods
+    def test_order_urls_without_authorization_header(self):
+        order_list_res = self.api_client.get(self.order_list_url)
+        self.assertEqual(order_list_res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        order_detail_res = self.api_client.get(self.order_detail_url)
+        self.assertEqual(order_detail_res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_order_urls_http_methods(self):
+        self.allowed_http_methods.check_allowed_methods(url=self.order_list_url, auth_token=self.auth_token)
+        self.allowed_http_methods.check_allowed_methods(url=self.order_detail_url, auth_token=self.auth_token)        
+
+    def test_order_urls_resolves(self):
+        self.assertEqual(resolve(self.order_list_url).func.cls, OrderViewSet)
+        self.assertEqual(resolve(self.order_detail_url).func.cls, OrderViewSet)     
+
+    def test_order_list_url(self):
+        self.set_authorization_header()
+        response = self.api_client.get(self.order_list_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_order_detail_url(self):
+        self.set_authorization_header()
+        response = self.api_client.get(self.order_detail_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+    
+    def test_orderitems_list_url(self):
+        url = self.order_detail_url + 'items/'
+        response = self.api_client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+    
+    def test_orderitems_detail_url(self):
+        url = self.order_detail_url + f'items/{self.orderitems.id}'
+        response = self.api_client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+    
+
+
+
+
+
+    # put test_without_authorization_method  / turn client to api_client  for the rest of the test cases
