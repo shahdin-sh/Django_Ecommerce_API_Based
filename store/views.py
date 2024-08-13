@@ -151,6 +151,10 @@ class CartItemViewSet(ModelViewSet):
         get_request_serializer = CartItemSerializer(created_item, context={'request': request})
         return Response(get_request_serializer.data, status=status.HTTP_201_CREATED)
     
+    # def destroy(self, request, *args, **kwargs):
+    #     # showing the proper data when the instance get deleted
+    #     pass
+    
     def get_throttles(self):
         return base_throttle.get_throttles(self.request)
     
@@ -188,10 +192,6 @@ class CustomerViewSet(ModelViewSet):
             # Respond with allowed methods and other OPTIONS-related headers
             return Response(status=status.HTTP_200_OK)
          
-    # @action(detail=True, methods=['GET'])
-    # def send_private_email(self, request, pk):
-    #     target_customer = Customer.objects.get(pk=pk)
-    #     return Response(f'send private email to {target_customer.user.username} by {request.user.username}')
 
     def get_throttles(self):
       self.throttle_scope = 'customer'
@@ -203,24 +203,40 @@ class AddressViewSet(ModelViewSet):
     search_fields = ['customer__user__username']
     pagination_class = StandardResultSetPagination
 
+    def is_manager(self):
+        user = self.request.user
+        return user.is_superuser or user.groups.filter(name='Customer Manager').exists()
+
     def get_queryset(self):
         queryset = Address.objects.select_related('customer__user').order_by('pk')
-        user = self.request.user
-
-        if user.is_superuser or user.groups.filter(name='Customer Manager').exists():
-            return queryset.all()
-        
-        queryset = queryset.filter(customer__user=user)
-        return queryset
+       
+        return queryset.all() if self.is_manager() else queryset.filter(customer__user=self.request.user)
 
     def get_serializer_class(self):
-        user = self.request.user
-        is_manager = user.is_superuser or user.groups.filter(name='Customer Manager').exists()
-
         if self.request.method == 'POST':
-            return ManagersAddAddressSerializer if is_manager else AddAddressSerializer
+            return ManagersAddAddressSerializer if self.is_manager() else AddAddressSerializer
 
-        return ManagerAddressSerializer if is_manager else AddressSerializer
+        return ManagerAddressSerializer if self.is_manager() else AddressSerializer
+    
+    def create(self, request, *args, **kwargs):
+        if self.is_manager():
+            creation_serializer = ManagersAddAddressSerializer
+            serializer = ManagerAddressSerializer
+        else:
+            creation_serializer = AddAddressSerializer
+            serializer = AddressSerializer
+        
+        creation_serializer = creation_serializer(data=request.data, context={'request' : request})
+        creation_serializer.is_valid(raise_exception=True)
+        created_address = creation_serializer.save()
+
+        serializer = serializer(created_address, context={'request': request})
+
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    # def destroy(self, request, *args, **kwargs):
+    #     # showing the proper data when the instance get deleted
+    #     pass
             
     def get_permissions(self):
         if self.request.method == 'DELETE':
@@ -240,52 +256,39 @@ class OrderViewSet(ModelViewSet):
     ordering_fields = ['datetime_created']
     pagination_class = StandardResultSetPagination
 
+    def is_manager(self):
+        user = self.request.user
+        return user.is_superuser or user.groups.filter(name='Order Manager').exists()
+
     def get_queryset(self):
         queryset = Order.objects.prefetch_related(
             Prefetch('items', OrderItem.objects.select_related('product')),
-        ).select_related('customer').order_by('-datetime_created')
+        ).select_related('customer__user', 'customer__address').order_by('-datetime_created')
         
-        user = self.request.user
-        # Order Managers and admins included
-        if user.is_staff:
-            return queryset.all()
-            
-        return queryset.filter(customer__user_id=user.id)
+        return queryset.all() if self.is_manager() else queryset.filter(customer__user=self.request.user)
 
     def get_serializer_class(self):
-        # get serializer class based on http method
         if self.request.method == 'POST':
             return OrderCreationSerializer
         
-        # get serializer class based on user authentication 
-        if self.request.user.is_staff:
-            return AdminOrderSerializer
-        return OrderSerializer
-    
-    def list(self, request, *args, **kwargs):
-        queryset = self.filter_queryset(self.get_queryset())
-        if queryset.count() == 0 and not request.user.is_staff:
-            return Response('You have no orders', status=status.HTTP_200_OK)
-        
-        # apply pagination
-        page = self.paginate_queryset(queryset)
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-        
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)    
-    
+        return ManagerOrderSerializer if self.is_manager() else OrderSerializer
+     
     def create(self, request, *args, **kwargs):
-        # create and save  the instance from OrderCreationSerializer
         order_creation_serializer = OrderCreationSerializer(data=request.data, context={'request': self.request})
         order_creation_serializer.is_valid(raise_exception=True)
         created_order = order_creation_serializer.save()
+        
+        if self.is_manager():
+          serializer = ManagerOrderSerializer(created_order)
+        else:  
+            serializer = OrderSerializer(created_order)
 
-        # showing data in OrderSerializer
-        serializer = OrderSerializer(created_order)
         return Response(serializer.data , status=status.HTTP_201_CREATED)
     
+    # def destroy(self, request, *args, **kwargs):
+    #     # showing the proper data when the instance get deleted
+    #     pass
+
     def get_permissions(self):
         if self.request.method in ['DELETE', 'PATCH', 'PUT']:
             return [IsOrderManager()]

@@ -340,7 +340,7 @@ class OrderItemSerializer(serializers.ModelSerializer):
         return f'{total_price: ,} {self.TOMAN_SIGN}'
     
 
-class AdminOrderSerializer(serializers.ModelSerializer):
+class ManagerOrderSerializer(serializers.ModelSerializer):
 
     customer = CustomerOrderSerializer(read_only=True)
     items = OrderItemSerializer(many=True, read_only=True)
