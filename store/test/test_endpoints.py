@@ -29,6 +29,7 @@ from ..views import (
     CustomerViewSet,
     AddressViewSet,
     OrderViewSet,
+    PaymentProcess
 )
 
 
@@ -467,10 +468,31 @@ class OrderUrlsTests(APITestCase):
         url = self.order_detail_url + f'items/{self.orderitems.id}'
         response = self.api_client.get(url)
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+
+class PaymentUrlTests(APITestCase):
+    def setUp(self):
+        self.api_client = APIClient()
+        self.mock_objs = MockObjects()
+        self.auth_token = GenerateAuthToken().generate_auth_token()
+        self.allowed_http_methods  = AllowedHttpMethodTests()
+        self.payment_url = reverse('payment-process')
     
-
-
-
-
-
-    # put test_without_authorization_method  / turn client to api_client  for the rest of the test cases
+    def set_authorization_header(self):
+        self.api_client.defaults['HTTP_AUTHORIZATION'] = f'JWT {self.auth_token}'
+    
+    # Test Methods 
+    def test_payment_url_without_authorization_header(self):
+        response = self.api_client.get(self.payment_url)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+    
+    def test_payment_url_http_methods(self):
+        self.allowed_http_methods.check_allowed_methods(url=self.payment_url, auth_token=self.auth_token)
+    
+    def test_payment_url_resolves(self):
+        self.assertEqual(resolve(self.payment_url).func.cls, PaymentProcess)
+    
+    def test_payment_url(self):
+        self.set_authorization_header()
+        response = self.api_client.get(self.payment_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
