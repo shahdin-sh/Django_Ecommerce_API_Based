@@ -300,6 +300,7 @@ class OrderViewSet(ModelViewSet):
 
     
 class PaymentProcess(APIView):
+    http_method_names = ['get', 'post', 'head', 'options']
     permission_classes = [IsAuthenticated]
 
     def get(self, request):

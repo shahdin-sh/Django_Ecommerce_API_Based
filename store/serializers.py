@@ -54,7 +54,7 @@ class CommentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Comment
-        fields = ['id', 'name', 'body', 'datetime_created']
+        fields = ['id', 'name', 'body', 'status', 'datetime_created']
 
     def create(self, validated_data):
         product_id = self.context['product'].id
@@ -62,18 +62,17 @@ class CommentSerializer(serializers.ModelSerializer):
         return self.instance
 
 
+# create ProductAddSerializer and ProductSerializer
 class ProductSerializer(serializers.ModelSerializer):
-    title = serializers.CharField(max_length=255, source='name')
     detail = serializers.HyperlinkedIdentityField(view_name='product-detail', lookup_field = 'slug')
     category = serializers.HyperlinkedRelatedField(queryset=Category.objects.all(), view_name = 'category-detail', lookup_field = 'slug')
-    unit_price = serializers.CharField(source='clean_price')
     num_of_comments = serializers.IntegerField(source='comments_count', read_only=True)
     comments = CommentSerializer(many=True, read_only=True) # Nested serializer for comments
 
     class Meta:
         model = Product
-        fields = ['title', 'unit_price', 'category', 'inventory', 'num_of_comments', 'detail', 'comments']
-        
+        fields = ['name', 'unit_price', 'category', 'inventory', 'num_of_comments', 'detail', 'comments']
+    
     def create(self, validated_data):
         product = Product(**validated_data)
         product.slug = slugify(product.name)

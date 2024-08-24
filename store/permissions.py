@@ -54,7 +54,7 @@ class IsCustomerManager(permissions.BasePermission, IsAdminMixin, GroupCheckMixi
 
 class IsOrderManager(permissions.BasePermission, IsAdminMixin, GroupCheckMixin):
     def has_permission(self, request, view):
-        if self.has_admin_permission or self.check_users_group(request, view, 'Order Manager'):
+        if self.has_admin_permission(request, view) or self.check_users_group(request, view, 'Order Manager'):
             return True
 
 

@@ -8,6 +8,9 @@ from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
 from django.urls import resolve
 
+from .helpers.base_helper import BaseHelper
+from .helpers.endpoints_access_helper import ApiEndpointsAccessHelper
+
 from ..models import (
     Category,
     Product,
@@ -19,7 +22,6 @@ from ..models import (
     Order,
     OrderItem
 )
-
 from ..views import (
     CategoryViewSet, 
     ProductViewSet, 
@@ -104,10 +106,10 @@ class GenerateAuthToken:
                 return access_token
             except KeyError:
                 raise KeyError(f"'access' key not found in {response.data}")
-        raise AssertionError(f'{response.content}')
+        raise AssertionError(f'{response.content} | {response.status_code}')
 
 
-# Test Cases
+#  Test Cases
 class AllowedHttpMethodTests(APITestCase):
     LIST_HTTP_METHODS = ['GET', 'POST', 'OPTIONS', 'HEAD']
     DETAIL_HTTP_METHODS = ['GET', 'OPTIONS', 'HEAD', 'PUT', 'PATCH', 'DELETE']
@@ -151,8 +153,11 @@ class AllowedHttpMethodTests(APITestCase):
 class ProductUrlsTests(APITestCase):
     def setUp(self):
         self.api_client = APIClient()
-        self.mock_objs = MockObjects() # Instantiate MockObjects
+        self.mock_objs = MockObjects()  
+        self.auth_token = GenerateAuthToken().generate_auth_token()
         self.allowed_http_methods = AllowedHttpMethodTests()
+        self.endpoint_acess_helper = ApiEndpointsAccessHelper(self)
+        self.user = self.mock_objs.user_obj
         self.category = self.mock_objs.category_obj
         self.product = self.mock_objs.product_obj
         self.comment = self.mock_objs.comment_obj
@@ -175,15 +180,17 @@ class ProductUrlsTests(APITestCase):
         self.assertEqual(resolve(self.category_list_url).func.cls, CategoryViewSet)
         self.assertEqual(resolve(self.category_detail_url).func.cls, CategoryViewSet)
 
-    def test_category_list_url(self):
-        response = self.api_client.get(self.category_list_url)
-        self.assertTrue(response.json().get('count') > 0)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-    
-    def test_category_detail_url(self):
-        response = self.api_client.get(self.category_detail_url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-    
+    def test_category_urls_access(self):
+        list_url = self.category_list_url
+        self.endpoint_acess_helper.urls_method_access_test(list_url, 'product', 
+            self.auth_token, self.user, self.product_manager_group
+        )
+
+        detail_url = self.category_detail_url
+        self.endpoint_acess_helper.urls_method_access_test(detail_url, 'product', 
+            self.auth_token, self.user, self.product_manager_group
+        )
+
     def test_product_urls_http_methods(self):
         self.allowed_http_methods.check_allowed_methods(self.product_list_url)
         self.allowed_http_methods.check_allowed_methods(self.product_detail_url)
@@ -191,16 +198,18 @@ class ProductUrlsTests(APITestCase):
     def test_product_urls_resolves(self):
         self.assertEqual(resolve(self.product_list_url).func.cls, ProductViewSet)
         self.assertEqual(resolve(self.product_detail_url).func.cls, ProductViewSet)
-    
-    def test_product_list_url(self):
-        response = self.api_client.get(self.product_list_url)
-        self.assertTrue(response.json().get('count') > 0)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-    
-    def test_product_detail_url(self):                            
-        response = self.api_client.get(self.product_detail_url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-    
+       
+    def test_product_urls_access(self):
+        list_url = self.product_list_url
+        self.endpoint_acess_helper.urls_method_access_test(list_url, 'product', 
+            self.auth_token, self.user, self.product_manager_group
+        )
+
+        detail_url = self.product_detail_url
+        self.endpoint_acess_helper.urls_method_access_test(detail_url, 'product', 
+            self.auth_token, self.user, self.product_manager_group
+        )
+
     def test_comment_urls_http_methods(self):
         self.allowed_http_methods.check_allowed_methods(self.comment_list_url)
         self.allowed_http_methods.check_allowed_methods(self.comment_detail_url)
@@ -209,22 +218,26 @@ class ProductUrlsTests(APITestCase):
         self.assertEqual(resolve(self.comment_list_url).func.cls, CommentViewSet)
         self.assertEqual(resolve(self.comment_detail_url).func.cls, CommentViewSet)
     
-    def test_comment_list_url(self):
-        response = self.api_client.get(self.comment_list_url)
-        self.assertTrue(response.json().get('count') > 0)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-    
-    def test_comment_detail_url(self):
-        response = self.api_client.get(self.comment_detail_url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+    def test_comment_urls_access(self):
+        list_url = self.comment_list_url
+        self.endpoint_acess_helper.urls_method_access_test(list_url, 'comment', 
+            self.auth_token, self.user, self.comment_manager_group
+        )
+
+        detail_url = self.comment_detail_url
+        self.endpoint_acess_helper.urls_method_access_test(detail_url, 'comment', 
+            self.auth_token, self.user, self.comment_manager_group
+        )
 
 
 class CartUrlsTests(APITestCase):
     def setUp(self):
         self.api_client = APIClient()
+        self.base_helper = BaseHelper()
         self.mock_objs = MockObjects() # Instantiate MockObjects
         self.auth_token = GenerateAuthToken().generate_auth_token()
         self.allowed_http_methods = AllowedHttpMethodTests()
+        self.endpoint_acess_helper = ApiEndpointsAccessHelper(self)
         self.user = self.mock_objs.user_obj
         self.cart = self.mock_objs.cart_obj
         self.cartitems = self.mock_objs.cartitems_obj
@@ -233,17 +246,7 @@ class CartUrlsTests(APITestCase):
         self.cartitems_list_url = self.cart_detail_url + 'items/'
         self.cartitems_detail_url = self.cart_detail_url + f'items/{self.cartitems.id}/'
     
-    def set_authorization_header(self):
-        self.api_client.defaults['HTTP_AUTHORIZATION'] = f'JWT {self.auth_token}'
-
     # Test Methods
-    def test_cart_urls_without_authorization_header(self):
-        cart_list_res = self.api_client.get(self.cart_list_url)
-        self.assertEqual(cart_list_res.status_code, status.HTTP_401_UNAUTHORIZED)
-
-        cart_detail_res = self.api_client.get(self.cart_detail_url)
-        self.assertEqual(cart_detail_res.status_code, status.HTTP_401_UNAUTHORIZED)
-
     def test_cart_urls_https_methods(self):
         expected_methods = [method.upper() for method in CartViewSet.http_method_names]
         expected_methods.remove('POST')
@@ -251,26 +254,20 @@ class CartUrlsTests(APITestCase):
         self.allowed_http_methods.check_allowed_methods(self.cart_detail_url, expected_methods=expected_methods, auth_token=self.auth_token)
 
     def test_cart_urls_resolves(self):
-        self.set_authorization_header()
+        self.base_helper.set_authorization_header(self.api_client, self.auth_token)
         self.assertEqual(resolve(self.cart_list_url).func.cls, CartViewSet)
         self.assertEqual(resolve(self.cart_detail_url).func.cls, CartViewSet)
+  
+    def test_cart_urls_access(self):
+        list_url = self.cart_list_url
+        self.endpoint_acess_helper.urls_method_access_test(list_url, 'cart', 
+            self.auth_token, self.user, manager_group=None
+        )
 
-    def test_cart_list_url(self):
-        self.set_authorization_header()
-        response = self.api_client.get(self.cart_list_url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-    
-    def test_cart_detail_url(self):
-        self.set_authorization_header()
-        response = self.api_client.get(self.cart_detail_url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-    
-    def test_cartitms_urls_without_authorization_header(self):
-        list_url = self.api_client.get(self.cart_list_url)
-        self.assertEqual(list_url.status_code, status.HTTP_401_UNAUTHORIZED)
-
-        detail_url = self.api_client.get(self.cart_detail_url)
-        self.assertEqual(detail_url.status_code, status.HTTP_401_UNAUTHORIZED)
+        detail_url = self.cart_detail_url
+        self.endpoint_acess_helper.urls_method_access_test(detail_url, 'cart', 
+            self.auth_token, self.user, manager_group=None
+        )
 
     def test_cartitems_urls_http_methods(self):
         expected_methods =  [method.upper() for method in CartItemViewSet.http_method_names]
@@ -279,27 +276,29 @@ class CartUrlsTests(APITestCase):
         self.allowed_http_methods.check_allowed_methods(url=self.cartitems_detail_url, expected_methods=expected_methods, auth_token=self.auth_token)
 
     def test_cartitems_urls_resolves(self):
-        self.set_authorization_header()
+        self.base_helper.set_authorization_header(self.api_client, self.auth_token)
         self.assertEqual(resolve(self.cartitems_list_url).func.cls, CartItemViewSet)
         self.assertEqual(resolve(self.cartitems_detail_url).func.cls, CartItemViewSet)
 
-    def test_cartitems_list_url(self):
-        self.set_authorization_header()
-        response = self.api_client.get(self.cart_list_url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+    def test_cartitems_urls_access(self):
+        list_url = self.cartitems_list_url
+        self.endpoint_acess_helper.urls_method_access_test(list_url, 'cartitems', 
+            self.auth_token, self.user, manager_group=None
+        )
 
-    def test_cartitems_detail_url(self):
-        self.set_authorization_header()
-        response = self.api_client.get(self.cartitems_detail_url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-
+        detail_url = self.cartitems_list_url
+        self.endpoint_acess_helper.urls_method_access_test(detail_url, 'cartitems', 
+            self.auth_token, self.user, manager_group=None
+        )
 
 class CustomerUrlsTests(APITestCase):
     def setUp(self):
         self.api_client = APIClient()
+        self.base_helper = BaseHelper()
         self.mock_objs = MockObjects()
         self.auth_token = GenerateAuthToken().generate_auth_token()
         self.allowed_http_methods = AllowedHttpMethodTests()
+        self.endpoint_acess_helper = ApiEndpointsAccessHelper(self)
         self.user = self.mock_objs.user_obj
         self.customer = self.mock_objs.customer_obj
         self.address = self.mock_objs.address_obj
@@ -311,20 +310,6 @@ class CustomerUrlsTests(APITestCase):
 
         self.customer_manager_group = Group.objects.create(name='Customer Manager')
 
-    def set_or_unset_customer_manager_group(self, set_group:bool):
-        if set_group == True:
-            self.user.groups.set([self.customer_manager_group])
-        elif set_group == False:
-            self.user.groups.remove(self.customer_manager_group)
-    
-    def set_authorization_header(self):
-        self.api_client.defaults['HTTP_AUTHORIZATION'] = f'JWT {self.auth_token}'
-
-    def user_to_superuser(self):
-        self.user.is_superuser = True
-        self.user.save()
-    
-    # Test Methods
     def test_customer_urls_without_authorization_header(self):
         customer_list_res = self.api_client.get(self.customer_list_url)
         self.assertEqual(customer_list_res.status_code, status.HTTP_401_UNAUTHORIZED)
@@ -333,7 +318,7 @@ class CustomerUrlsTests(APITestCase):
         self.assertEqual(customer_detail_res.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_customer_urls_http_methods(self):
-        self.set_or_unset_customer_manager_group(set_group=True)
+        self.base_helper.set_or_unset_manager_groups(True, self.user ,self.customer_manager_group)
         expected_methods = [method.upper() for method in CustomerViewSet.http_method_names]
         expected_methods.remove('PUT')
         self.allowed_http_methods.check_allowed_methods(url=self.customer_list_url, expected_methods=expected_methods, auth_token=self.auth_token)
@@ -345,36 +330,17 @@ class CustomerUrlsTests(APITestCase):
         self.assertEqual(resolve(self.customer_list_url).func.cls, CustomerViewSet)
         self.assertEqual(resolve(self.customer_detail_url).func.cls, CustomerViewSet)        
 
-    def test_customer_list_url_different_users_access(self):
-        self.set_authorization_header()
+    def test_customer_urls_access(self):
+        list_url = self.customer_list_url
+        self.endpoint_acess_helper.urls_method_access_test(list_url, 'customer', 
+            self.auth_token, self.user, self.customer_manager_group
+        )
 
-        response = self.api_client.get(self.customer_list_url)
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        
-        self.set_or_unset_customer_manager_group(set_group=True)
-        response = self.api_client.get(self.customer_list_url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        
-        self.set_or_unset_customer_manager_group(set_group=False)
-        self.user_to_superuser()
-        response = self.api_client.get(self.customer_list_url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        
-    def test_customer_detail_url_different_users_access(self):
-        self.set_authorization_header()
-        
-        response = self.api_client.get(self.customer_detail_url)
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        
-        self.set_or_unset_customer_manager_group(set_group=True)
-        response = self.api_client.get(self.customer_detail_url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        
-        self.set_or_unset_customer_manager_group(set_group=False)
-        self.user_to_superuser()
-        response = self.api_client.get(self.customer_detail_url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-
+        detail_url = self.customer_detail_url
+        self.endpoint_acess_helper.urls_method_access_test(detail_url, 'customer', 
+            self.auth_token, self.user, self.customer_manager_group
+        )
+    
     def test_customer_info_url_without_authorization_header(self):
         response = self.api_client.get(self.customer_info_url)
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
@@ -386,10 +352,11 @@ class CustomerUrlsTests(APITestCase):
     def test_customer_info_url_resolves(self):
         self.assertEqual(resolve(self.customer_info_url).func.cls, CustomerViewSet)
 
-    def test_customer_info_url(self):
-        self.set_authorization_header()
-        response = self.api_client.get(self.customer_info_url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+    def test_customer_info_url_access(self):
+        url = self.customer_info_url
+        self.endpoint_acess_helper.urls_method_access_test(url, 'customer_info', 
+            self.auth_token, self.user, self.customer_manager_group
+        )
     
     def test_address_urls_without_authorization_header(self):
         address_list_res = self.api_client.get(self.address_list_url)
@@ -406,29 +373,32 @@ class CustomerUrlsTests(APITestCase):
         self.assertEqual(resolve(self.address_list_url).func.cls, AddressViewSet)
         self.assertEqual(resolve(self.address_detail_url).func.cls, AddressViewSet)     
 
-    def test_address_list_url(self):
-        self.set_authorization_header()
-        response = self.api_client.get(self.address_list_url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+    def test_address_urls_access(self):
+        list_url = self.address_list_url
+        self.endpoint_acess_helper.urls_method_access_test(list_url, 'address', 
+            self.auth_token, self.user, self.customer_manager_group
+        )
 
-    def test_address_detail_url(self):
-        self.set_authorization_header()
-        response = self.api_client.get(self.address_detail_url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-
-
+        detail_url = self.address_detail_url
+        self.endpoint_acess_helper.urls_method_access_test(detail_url, 'address', 
+            self.auth_token, self.user, self.customer_manager_group
+        )
+    
+    
 class OrderUrlsTests(APITestCase):
     def setUp(self):
         self.api_client = APIClient()
         self.mock_objs = MockObjects()
         self.auth_token = GenerateAuthToken().generate_auth_token()
         self.allowed_http_methods = AllowedHttpMethodTests()
+        self.endpoint_acess_helper = ApiEndpointsAccessHelper(self)
+        self.user = self.mock_objs.user_obj
         self.order = self.mock_objs.order_obj
         self.orderitems = self.mock_objs.orderitems_obj
         self.order_list_url = reverse('order-list')
         self.order_detail_url = reverse('order-detail', args=[self.order.id])
 
-        Group.objects.create(name='Order Manager')
+        self.order_manager_group = Group.objects.create(name='Order Manager')
     
     def set_authorization_header(self):
         self.api_client.defaults['HTTP_AUTHORIZATION'] = f'JWT {self.auth_token}'
@@ -449,50 +419,46 @@ class OrderUrlsTests(APITestCase):
         self.assertEqual(resolve(self.order_list_url).func.cls, OrderViewSet)
         self.assertEqual(resolve(self.order_detail_url).func.cls, OrderViewSet)     
 
-    def test_order_list_url(self):
-        self.set_authorization_header()
-        response = self.api_client.get(self.order_list_url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+    def test_order_urls_access(self):
+        list_url = self.order_list_url
+        self.endpoint_acess_helper.urls_method_access_test(list_url, 'order', 
+            self.auth_token, self.user, self.order_manager_group
+        )
 
-    def test_order_detail_url(self):
-        self.set_authorization_header()
-        response = self.api_client.get(self.order_detail_url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-    
-    def test_orderitems_list_url(self):
-        url = self.order_detail_url + 'items/'
-        response = self.api_client.get(url)
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-    
-    def test_orderitems_detail_url(self):
-        url = self.order_detail_url + f'items/{self.orderitems.id}'
-        response = self.api_client.get(url)
+        detail_url = self.order_detail_url
+        self.endpoint_acess_helper.urls_method_access_test(detail_url, 'order', 
+            self.auth_token, self.user, self.order_manager_group
+        )
+   
+    def test_orderitems_urls_access(self):
+        list_url = self.order_detail_url + 'items/'
+        response = self.api_client.get(list_url)
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
+        detail_url = self.order_detail_url + f'items/{self.orderitems.id}'
+        response = self.api_client.get(detail_url)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+    
 
-class PaymentUrlTests(APITestCase):
+class PaymentUrlsTests(APITestCase):
     def setUp(self):
         self.api_client = APIClient()
         self.mock_objs = MockObjects()
         self.auth_token = GenerateAuthToken().generate_auth_token()
         self.allowed_http_methods  = AllowedHttpMethodTests()
+        self.endpoint_acess_helper = ApiEndpointsAccessHelper(self)
+        self.user = self.mock_objs.user_obj
         self.payment_url = reverse('payment-process')
     
-    def set_authorization_header(self):
-        self.api_client.defaults['HTTP_AUTHORIZATION'] = f'JWT {self.auth_token}'
-    
-    # Test Methods 
-    def test_payment_url_without_authorization_header(self):
-        response = self.api_client.get(self.payment_url)
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-    
-    def test_payment_url_http_methods(self):
-        self.allowed_http_methods.check_allowed_methods(url=self.payment_url, auth_token=self.auth_token)
+    # Test Methods       
+    # def test_payment_url_http_methods(self):
+    #     self.allowed_http_methods.check_allowed_methods(url=self.payment_url, auth_token=self.auth_token)
     
     def test_payment_url_resolves(self):
         self.assertEqual(resolve(self.payment_url).func.cls, PaymentProcess)
     
-    def test_payment_url(self):
-        self.set_authorization_header()
-        response = self.api_client.get(self.payment_url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+    def test_payment_urls_access(self):
+        url = self.payment_url
+        self.endpoint_acess_helper.urls_method_access_test(self.payment_url, 'payment', 
+            self.auth_token, self.user, manager_group=None
+        )

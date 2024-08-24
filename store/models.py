@@ -137,9 +137,9 @@ class ApprovedCommentManager(models.Manager):
 
 
 class Comment(models.Model):
-    COMMENT_STATUS_WAITING = 'w'
-    COMMENT_STATUS_APPROVED = 'a'
-    COMMENT_STATUS_NOT_APPROVED = 'na'
+    COMMENT_STATUS_WAITING = 'waiting'
+    COMMENT_STATUS_APPROVED = 'approved'
+    COMMENT_STATUS_NOT_APPROVED = 'not approved'
     COMMENT_STATUS = [
         (COMMENT_STATUS_WAITING, 'Waiting'),
         (COMMENT_STATUS_APPROVED, 'Approved'),
@@ -150,7 +150,7 @@ class Comment(models.Model):
     name = models.CharField(max_length=255)
     body = models.TextField()
     datetime_created = models.DateTimeField(auto_now_add=True)
-    status = models.CharField(max_length=2, choices=COMMENT_STATUS, default=COMMENT_STATUS_WAITING)
+    status = models.CharField(max_length=100, choices=COMMENT_STATUS, default=COMMENT_STATUS_WAITING)
 
     objects = CommentManger()
     approved = ApprovedCommentManager()
