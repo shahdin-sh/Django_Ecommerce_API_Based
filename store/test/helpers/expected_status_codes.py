@@ -75,7 +75,7 @@ EXPECTED_STATUS_CODES = {
             'DELETE': status.HTTP_401_UNAUTHORIZED,
         },
     },
-    'auth': {
+    'user': {
         'product': {
             'OPTIONS': status.HTTP_200_OK,
             'GET': status.HTTP_200_OK,
@@ -169,7 +169,7 @@ EXPECTED_STATUS_CODES = {
         'cart': {
             'OPTIONS': status.HTTP_200_OK,
             'GET': status.HTTP_200_OK,
-            'POST': status.HTTP_400_BAD_REQUEST,
+            'POST': status.HTTP_201_CREATED,
             'PUT': status.HTTP_400_BAD_REQUEST,
             'PATCH': status.HTTP_405_METHOD_NOT_ALLOWED,
             # 'DELETE': status.HTTP_204_NO_CONTENT,

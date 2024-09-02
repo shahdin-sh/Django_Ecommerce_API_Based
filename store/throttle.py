@@ -39,4 +39,7 @@ class BaseThrottleView(views.APIView):
         
         if throttle_scope and throttle_scope not in throttle_rates:
             raise ValidationError(f'invalid throttle rate: {throttle_scope}, options are: {throttle_rates}')
+        
+        if group_name and not throttle_scope:
+            raise ValidationError('throttle_scope attribute has been missing')
             

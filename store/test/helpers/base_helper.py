@@ -23,4 +23,3 @@ class BaseHelper():
         else:
             user.is_superuser = False
         user.save()
-    

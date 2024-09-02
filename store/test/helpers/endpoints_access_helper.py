@@ -61,21 +61,19 @@ class ApiEndpointsAccessHelper():
     def urls_method_access_test(self, url:str, name:str, auth_token, user, manager_group:None):
         access_level = [
             ('anon', lambda: self.base_helper.unset_authorization_header(self.api_client)),
-            ('auth', lambda: self.base_helper.set_authorization_header(self.api_client, auth_token)),
-            # ('manager', lambda: self.base_helper.set_or_unset_manager_groups(set_group=True, user=user, manager_group=manager_group)),
+            ('user', lambda: self.base_helper.set_authorization_header(self.api_client, auth_token)),
+            ('manager', lambda: self.base_helper.set_or_unset_manager_groups(set_group=True, user=user, manager_group=manager_group)),
             ('admin', lambda: self.base_helper.set_to_superuser(set_superuser=True, user=user))
         ]
 
-        skip_manager = False
-
         for access, config_access in access_level:
-            # Always reset to non-superuser before configuring access
+            if access == 'manager' and manager_group is None:
+                continue
+        
+            # Always reset user access before configuring access
+            self.base_helper.set_or_unset_manager_groups(set_group=False, user=user, manager_group=manager_group)
             self.base_helper.set_to_superuser(set_superuser=False, user=user)
 
-            if manager_group is None and access == 'manager':
-                skip_manager = True
-            
-            if not skip_manager:
-                config_access()
+            config_access()
 
             self.get_expected_status_codes(url, EXPECTED_STATUS_CODES[access][name], access)

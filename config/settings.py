@@ -163,7 +163,7 @@ AUTH_USER_MODEL = 'accounts.CustomUser'
 
 # Rest Framework settings
 REST_FRAMEWORK = {
-    'DEFAULT_CACHE_RESPONSE_TIMEOUT': 60 * 15,
+    # 'DEFAULT_CACHE_RESPONSE_TIMEOUT': 60 * 15,
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
@@ -243,10 +243,10 @@ DEBUG_TOOLBAR_CONFIG = {
 
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
-# cache settings
-CACHES = {
-    'default': {
-        'BACKEND': 'django_bmemcached.memcached.BMemcached',
-        'LOCATION': '127.0.0.1:11211',
-    }
-}
+# # cache settings
+# CACHES = {
+#     'default': {
+#         'BACKEND': 'django_bmemcached.memcached.BMemcached',
+#         'LOCATION': '127.0.0.1:11211',
+#     }
+# }
