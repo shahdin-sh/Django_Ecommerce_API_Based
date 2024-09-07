@@ -1,5 +1,3 @@
-import time
-
 from rest_framework.test import APIClient, APITestCase
 from rest_framework import status
 from rest_framework.reverse import reverse
@@ -9,7 +7,7 @@ from django.conf import settings
 from rest_framework.exceptions import ValidationError
 
 from store.test.test_endpoints import MockObjects, GenerateAuthToken
-from store.test.helpers.base_helper import BaseHelper
+from store.test.helpers.base_helper import UserAuthHelper
 from store.throttle import BaseThrottleView
 
 
@@ -67,7 +65,7 @@ class ThrottleRatesTests(APITestCase):
         self.api_client = APIClient()
         self.mock_objects = MockObjects()
         self.auth_token = GenerateAuthToken().generate_auth_token()
-        self.base_helper = BaseHelper()
+        self.user_auth_helper = UserAuthHelper()
         self.user = self.mock_objects.user_obj
         self.product_url = reverse('product-list')
         self.category_url = reverse('category-list')
@@ -98,9 +96,9 @@ class ThrottleRatesTests(APITestCase):
 
     def throttle_testing(self, url: str, throttle_scope:str = None, manager_group:Group = None):
         access_level = (
-            ('anon', lambda: self.base_helper.unset_authorization_header(self.api_client)),
-            ('user', lambda: self.base_helper.set_authorization_header(self.api_client, self.auth_token)),
-            (throttle_scope, lambda: self.base_helper.set_or_unset_manager_groups(True, self.user, manager_group)),
+            ('anon', lambda: self.user_auth_helper.unset_authorization_header(self.api_client)),
+            ('user', lambda: self.user_auth_helper.set_authorization_header(self.api_client, self.auth_token)),
+            (throttle_scope, lambda: self.user_auth_helper.set_or_unset_manager_groups(True, self.user, manager_group)),
         )
         
         reach_any_access_level = False
@@ -176,7 +174,7 @@ class ThrottleRatesTests(APITestCase):
         self.throttle_testing(url, throttle_scope=None, manager_group=None)
     
     def test_payment_url_scope_throttle(self):
-        self.base_helper.set_authorization_header(self.api_client, self.auth_token)
+        self.user_auth_helper.set_authorization_header(self.api_client, self.auth_token)
         url = self.payment_url
 
         for _ in range(20 + 1):
