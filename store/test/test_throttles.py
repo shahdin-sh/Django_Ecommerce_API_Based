@@ -14,12 +14,29 @@ from store.throttle import BaseThrottleView
 class ThrottleValidationTests(APITestCase):
     def setUp(self):
         self.api_client = APIClient()
+        self.mock_obj = MockObjects()
+        self.auth_token =  GenerateAuthToken().generate_auth_token()
         self.view = BaseThrottleView()
         self.valid_group_names = ['Product Manager', 'Content Manager', 'Customer Manager', 'Order Manager']
         self.valid_throttle_scopes = ['anon', 'user', 'product', 'category', 'comment', 'customer', 'address', 'order', 'payment']
 
         # manager groups
         [Group.objects.create(name=group_name) for group_name in self.valid_group_names]
+    
+    def test_urls_without_group(self):
+        [group.delete() for group in Group.objects.all()]
+        
+        UserAuthHelper().set_authorization_header(self.api_client, self.auth_token)
+
+        res = self.api_client.get
+        responses = [
+            res(reverse('product-list')),
+            res(reverse('category-list')),
+            res(reverse('address-list')),
+            res(reverse('order-list'))
+        ]
+        
+        [self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST) for res in responses]
         
     def test_valid_group(self):
         [self.view.validation(group_name, throttle_scope='product') for group_name in self.valid_group_names]
