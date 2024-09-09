@@ -13,7 +13,7 @@ class ProductFilter(filters.FilterSet):
     inventory_lte = filters.NumberFilter(field_name='inventory', lookup_expr='lte')
     inventory_gte = filters.NumberFilter(field_name='inventory', lookup_expr='gte')
     min_price = filters.NumberFilter(field_name='unit_price', lookup_expr='lte')
-    max_price = filters.NumberFilter(field_name='unit_price', lookup_expr='lte')
+    max_price = filters.NumberFilter(field_name='unit_price', lookup_expr='gte')
     inventory_status = filters.ChoiceFilter(
         choices=INVENTORY_STATUS_CHOICE, 
         method='filter_by_inventory_status',
