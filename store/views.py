@@ -64,8 +64,7 @@ class CategoryViewSet(ModelViewSet):
             # with annotate method, products_count is known as a Category field when this view is called.
             products_count = Count('products')
         ).prefetch_related('products').order_by('-products_count')
-    filter_backend = [SearchFilter, DjangoFilterBackend]
-    search_fields = ['title']
+    filter_backends = [DjangoFilterBackend]
     filterset_fields  = ['title']
     pagination_class = StandardResultSetPagination
     permission_classes = [IsProductManager]
@@ -74,7 +73,7 @@ class CategoryViewSet(ModelViewSet):
         category = get_object_or_404(Category.objects.all().annotate(products_count = Count('products')), slug=slug)
         if category.products.count() > 0:
             return Response(
-                f'{category.title} referenced through protected foreign key:{[product for product in category.products.all()]}', 
+                f'{category.title} referenced through protected foreign key: {[product for product in category.products.all()]}', 
                 status=status.HTTP_405_METHOD_NOT_ALLOWED
             )
         

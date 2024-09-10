@@ -5,7 +5,7 @@ from rest_framework import status
 
 from django.contrib.auth.models import Group
 
-from store.models import Product
+from store.models import Product, Category
 from store.test.helpers.base_helper import MockObjects, UserAuthHelper, GenerateAuthToken
 
 class ProductViewSetTests(APITestCase):
@@ -54,6 +54,7 @@ class ProductViewSetTests(APITestCase):
     # Test Cases
     def test_product_objects_count(self):
         response = self.api_client.get(self.product_list_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['count'], 4)
 
     def test_create_product(self):
@@ -104,8 +105,7 @@ class ProductViewSetTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_valid_and_invlaid_lookup_field(self):
-        valid_product_detail = reverse('product-detail', args=[self.product_obj.slug])
-        response = self.api_client.get(valid_product_detail)
+        response = self.api_client.get(self.product_detail_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         invalid_product_detail = reverse('product-detail', args=[self.product_obj.id])
@@ -194,5 +194,132 @@ class ProductViewSetTests(APITestCase):
         self.assertEqual(len(response.data['results']), 2)
         self.assertIsNotNone(response.data['previous'])
         self.assertIsNone(response.data['next'])
+
+
+class CategoryViewSetTests(APITestCase):
+    def setUp(self):
+        self.api_client = APIClient()
+        self.mock_objs = MockObjects()
+        self.auth_token = GenerateAuthToken().generate_auth_token()
+        self.user_auth_helper = UserAuthHelper()
+        self.user_obj = self.mock_objs.user_obj
+        self.product_obj = self.mock_objs.product_obj
+        self.categoty_obj = self.mock_objs.category_obj
+        self.category_list_url = reverse('category-list')
+        self.category_detail_url = reverse('category-detail', args=[self.categoty_obj.slug])
+
+        # different category objs, 3 in total
+        self.category_1 = Category.objects.create(
+            title = 'category1',
+            slug = 'category1'
+        )
+        self.category_2 = Category.objects.create(
+            title = 'category2',
+            slug = 'category2'
+        )
+    
+        self.product_manager_group = Group.objects.create(name='Product Manager')
+    
+    def set_authorization_header(self):
+        self.user_auth_helper.set_authorization_header(self.api_client, self.auth_token)
+    
+    def set_manager_group(self):
+        self.user_auth_helper.set_or_unset_manager_groups(True, self.user_obj, manager_group=self.product_manager_group)
+
+    # Test Cases
+    def test_category_objects_count(self):
+        response = self.api_client.get(self.category_list_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['count'], 3)
+
+    def test_create_category(self):
+        self.set_authorization_header()
+        self.set_manager_group()
+
+        data = {'title': 'test category', 'slug': 'test-category'}
+
+        response = self.api_client.post(self.category_list_url, data, 'json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+     
+    def test_update_product(self):
+        self.set_authorization_header()
+        self.set_manager_group()
+
+        data = {'title': 'some title for catgory'}
+
+        response = self.api_client.put(self.category_detail_url, data, 'json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+    
+    def test_delete_product_under_protected_foreignkey(self):
+        self.set_authorization_header()
+        self.set_manager_group()
+
+        response = self.api_client.delete(self.category_detail_url)
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+        error_msg = f'"category referenced through protected foreign key: {[product for product in self.categoty_obj.products.all()]}"'
+        self.assertEqual(error_msg, response.content.decode('utf-8'))
+    
+    def test_delete_product_without_protected_foreignkey(self):
+        self.set_authorization_header()
+        self.set_manager_group()
+
+        category_detail = reverse('category-detail', args=[self.category_1.slug])
+
+        response = self.api_client.delete(category_detail)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_valid_and_invlaid_lookup_field(self):
+        response = self.api_client.get(self.category_detail_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        invalid_category_detail = reverse('category-detail', args=[self.categoty_obj.id])
+        response = self.api_client.get(invalid_category_detail)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+    
+    def test_cateogry_default_queryset_ordering(self):
+        # set products for category_1
+        self.product_test1 = Product.objects.create(
+            name = 'product_test_1',
+            category = self.category_1,
+            slug = 'product-test-1',
+            unit_price =  '50000',
+            inventory = 4, 
+        )
+        self.product_test2 = Product.objects.create(
+            name = 'product_test_2',
+            category = self.category_1,
+            slug = 'product_test_2',
+            unit_price =  '20000',
+            inventory = 1, 
+        )
+
+        response = self.api_client.get(self.category_list_url)
+        results = [result['title'] for result in response.data['results']]
+        self.assertEqual(results, ['category1', 'category', 'category2'])
+
+        self.assertEqual(['results'][0]['num_of_products'], 2)
+    
+    def test_category_filter_by_title(self):
+        response = self.api_client.get(self.category_list_url, {'title': self.categoty_obj.title})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['count'], 1)
+    
+    def test_category_pagination(self):
+        response = self.api_client.get(self.category_list_url, {'page_size': 2, 'page': 1})
+        self.assertEqual(len(response.data['results']), 2)
+        self.assertIsNotNone(response.data['next'])
+        self.assertIsNone(response.data['previous'])
+
+        response = self.api_client.get(self.category_list_url, {'page_size': 2, 'page': 2})
+        self.assertEqual(len(response.data['results']), 1)
+        self.assertIsNotNone(response.data['previous'])
+        self.assertIsNone(response.data['next'])
+
+
+
+    
+
+
 
 
