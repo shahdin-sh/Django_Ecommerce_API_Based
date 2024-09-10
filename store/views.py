@@ -88,6 +88,7 @@ class CategoryViewSet(ModelViewSet):
 # Comment View
 class CommentViewSet(ModelViewSet):
     serializer_class = CommentSerializer
+    lookup_field = 'pk'
     filter_backends = [OrderingFilter]
     ordering_fields = ['datetime_created', 'name']
     pagination_class = StandardResultSetPagination

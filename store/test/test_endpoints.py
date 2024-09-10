@@ -35,8 +35,15 @@ class ProductUrlsTests(APITestCase):
         self.category_detail_url = reverse('category-detail', args=[self.category.slug])
         self.product_list_url = reverse('product-list')
         self.product_detail_url = reverse('product-detail', args=[self.product.slug])
-        self.comment_list_url = reverse('product-detail', args=[self.product.slug]) + 'comments/'
-        self.comment_detail_url = reverse('product-detail', args=[self.product.slug]) + f'comments/{self.comment.id}/'
+        self.comment_list_url = reverse('product-comments-list', kwargs={'product_slug':self.product.slug})
+        self.comment_detail_url =  reverse(
+            'product-comments-detail', 
+            kwargs={
+                'product_slug':self.product.slug,
+                'pk': self.comment.pk
+            }
+        )
+
         #  Create a user group to ensure throttling and permissions are correctly applied in tests. 
         #  The test environment mirrors the actual conditions under which the URL paths are accessed.
         self.product_manager_group = Group.objects.create(name='Product Manager')
