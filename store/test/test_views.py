@@ -4,8 +4,9 @@ from rest_framework import status
 
 
 from django.contrib.auth.models import Group
+from django.urls.exceptions import NoReverseMatch
 
-from store.models import Product, Category, Comment
+from store.models import Product, Category, Comment, Cart
 from store.test.helpers.base_helper import MockObjects, UserAuthHelper, GenerateAuthToken
 from store.views import CommentViewSet
 
@@ -112,6 +113,11 @@ class ProductViewSetTests(APITestCase):
         invalid_product_detail = reverse('product-detail', args=[self.product_obj.id])
         response = self.api_client.get(invalid_product_detail)
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+    
+    def test_product_default_queryset_ordering(self):
+        response = self.api_client.get(self.product_list_url)
+        results = [result['name'] for result in response.data['results']]
+        self.assertEqual(results, ['product3','product2', 'product1', 'product'])
 
     def test_product_inventory_lte_filter(self):
         response = self.api_client.get(self.product_list_url, {'inventory_lte': 5})
@@ -152,11 +158,6 @@ class ProductViewSetTests(APITestCase):
     def test_product_search_by_category(self):
         response = self.api_client.get(self.product_list_url, {'search': 'category'})
         self.assertEqual(response.data['count'], 4)
-    
-    def test_product_default_queryset_ordering_filter(self):
-        response = self.api_client.get(self.product_list_url)
-        results = [result['name'] for result in response.data['results']]
-        self.assertEqual(results, ['product3','product2', 'product1', 'product'])
 
     def test_product_name_ordering_filter(self):
         ascending_order_response = self.api_client.get(self.product_list_url, {'ordering': 'name'})
@@ -431,7 +432,7 @@ class CommentViewSetTests(APITestCase):
         response = self.api_client.get(invalid_comment_kwargs)
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
     
-    def test_comment_default_querysey_filtering(self):
+    def test_comment_default_querysey_ordering(self):
         response = self.api_client.get(self.comment_list_url)
         results = [result['name'] for result in response.data['results']]
         self.assertEqual(results, ['comment2', 'comment1', 'comment'])
@@ -480,12 +481,108 @@ class CommentViewSetTests(APITestCase):
         self.assertIsNone(response.data['next'])
 
 
+class CartViewSetTests(APITestCase):
+    def setUp(self):
+        self.api_client = APIClient()
+        self.mock_objs = MockObjects()
+        self.auth_token = GenerateAuthToken().generate_auth_token()
+        self.user_auth_helper = UserAuthHelper()
+        self.user_obj = self.mock_objs.user_obj
+        self.cart_obj = self.mock_objs.cart_obj
+        self.cartitems_obj = self.mock_objs.cartitems_obj
+        self.cart_list_url = reverse('cart-list')
+        self.cart_detail_url = reverse('cart-detail', args=[self.cart_obj.id])
+
+        # different cart objs, 4 in total
+        self.cart_1 = Cart.objects.create(
+            id = 'b3f8e7c9-6bda-42ad-93ab-3c091fe7a581',
+        )
+        self.cart_2 = Cart.objects.create(
+            id = 'f5ac1e23-4cbe-45a7-b2a2-3e081df2b971',
+        )
+        self.cart_3 = Cart.objects.create(
+            id = 'd4e7b8f2-9cfa-4829-a8f1-5d210af3c874',
+        )
     
+    def set_authorization_header(self):
+        self.user_auth_helper.set_authorization_header(self.api_client, self.auth_token)
+     
+    # Test Cases
+    def test_cart_objects_count(self):
+        self.set_authorization_header()
 
-
-
+        response = self.api_client.get(self.cart_list_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['count'], 4)
     
+    def test_cart_create(self):
+        self.set_authorization_header()
 
+        response = self.api_client.post(self.cart_list_url)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+    
+    def test_cart_update(self):
+        self.set_authorization_header()
 
+        response = self.api_client.put(self.cart_detail_url)
 
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+    
+    def test_cart_delete(self):
+        # testining with more detail of different users access in test_endpoints.py 
+        self.set_authorization_header()
 
+        response = self.api_client.delete(self.cart_list_url)
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def test_cart_valid_and_invalid_lookup_field(self):
+        self.set_authorization_header()
+
+        response = self.api_client.get(self.cart_detail_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        invalid_cart_detail = reverse('cart-detail', args=['q5ac1e23-4cbe-45a7-b2a2-3e081df2b971'])
+        response = self.api_client.get(invalid_cart_detail)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+    
+    def test_cart_default_queryset_ordering(self):
+        self.set_authorization_header()
+
+        response = self.api_client.get(self.cart_list_url)
+        results = [result['id'] for result in response.data['results']]
+        self.assertEqual(results, [self.cart_3.id, self.cart_2.id, self.cart_1.id, self.cart_obj.id])
+    
+    def test_cart_pagination(self):
+        self.set_authorization_header()
+
+        response = self.api_client.get(self.cart_list_url, {'page_size': 2, 'page': 1})
+        self.assertEqual(len(response.data['results']), 2)
+        self.assertIsNotNone(response.data['next'])
+        self.assertIsNone(response.data['previous'])
+
+        response = self.api_client.get(self.cart_list_url, {'page_size': 2, 'page': 2})
+        self.assertEqual(len(response.data['results']), 2)
+        self.assertIsNotNone(response.data['previous'])
+        self.assertIsNone(response.data['next'])
+    
+    def test_valid_cart_lookup_value_regax(self):
+        self.set_authorization_header()
+        correct_uuid = 'a5ac1e23-4cbe-45a7-b2a2-3e081df2b971'
+        test_cart = Cart.objects.create(id=correct_uuid)
+
+        response = self.api_client.get((reverse('cart-detail', args=[test_cart.id])))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_valid_cart_lookup_value_regax(self):
+        invalid_cart_ids = [
+            'a2dbc6-a627bc416585202d151fe8b357',
+            '12345-abc',
+            'a2dbc6a6-27bc-4165',
+            'a2brwplfi-rtew-qwer-rfvg-poiq12mfekw'
+        ]
+
+        for invalid_cart_ids in invalid_cart_ids:
+            with self.assertRaises(NoReverseMatch) as context:
+                (reverse('cart-detail', args=[invalid_cart_ids]))
+
+            self.assertIn(invalid_cart_ids, str(context.exception))
