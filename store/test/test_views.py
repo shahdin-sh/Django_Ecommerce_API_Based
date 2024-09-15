@@ -3,11 +3,12 @@ from rest_framework.reverse import reverse
 from rest_framework import status
 
 
+from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
-from django.urls.exceptions import NoReverseMatch
 from django.db.utils import IntegrityError
+from django.urls.exceptions import NoReverseMatch
 
-from store.models import Product, Category, Comment, Cart, CartItem
+from store.models import Product, Category, Comment, Cart, CartItem, Customer
 from store.serializers import CartItemSerializer, AddItemtoCartSerializer
 from store.test.helpers.base_helper import MockObjects, UserAuthHelper, GenerateAuthToken
 
@@ -152,11 +153,11 @@ class ProductViewSetTests(APITestCase):
         response = self.api_client.get(self.product_list_url, {'category__slug': 'category'})
         self.assertEqual(response.data['count'], 4)
 
-    def test_product_search_by_name(self):
+    def test_product_search_by_name_filter(self):
         response = self.api_client.get(self.product_list_url, {'search': 'product1'})
         self.assertEqual(response.data['count'], 1)
     
-    def test_product_search_by_category(self):
+    def test_product_search_by_category_filter(self):
         response = self.api_client.get(self.product_list_url, {'search': 'category'})
         self.assertEqual(response.data['count'], 4)
 
@@ -774,3 +775,180 @@ class CartItemViewSetTests(APITestCase):
 
         # check that response is a list and not a paginated structure
         self.assertIsInstance(respones_data, list)
+
+
+class CustomerViewSetTests(APITestCase):
+    def setUp(self):
+        self.api_client = APIClient()
+        self.mock_objs = MockObjects()
+        self.auth_token = GenerateAuthToken().generate_auth_token()
+        self.user_auth_helper = UserAuthHelper()
+        self.user_obj = self.mock_objs.user_obj
+        self.customer_obj = self.mock_objs.customer_obj
+        self.customer_list_url = reverse('customer-list')
+        self.customer_detail_url = reverse('customer-detail', args=[self.customer_obj.id])
+        self.customer_me_action_url = reverse('customer-list') + 'me/'
+
+        # different customer objs, 4 in total
+        self.user_1 = get_user_model().objects.create_user(
+            username = 'username1',
+            email = 'username1@gmail.com',
+            password = 'user1',
+        )
+        self.user_2 = get_user_model().objects.create_user(
+            username = 'username2',
+            email = 'username2@gmail.com',
+            password = 'user1',
+        )
+        self.user_3 = get_user_model().objects.create_user(
+            username = 'username3',
+            email = 'username3@gmail.com',
+            password = 'user1',
+        )
+        self.customer_1 = Customer.objects.get(user__username='username1')
+        self.customer_2 = Customer.objects.get(user__username='username2')
+        self.customer_3 = Customer.objects.get(user__username='username3')
+    
+        self.customer_manager_group = Group.objects.create(name='Customer Manager')
+    
+    def set_authorization_header(self):
+        self.user_auth_helper.set_authorization_header(self.api_client, self.auth_token)
+    
+    def set_manager_group(self):
+        self.user_auth_helper.set_or_unset_manager_groups(True, self.user_obj, manager_group=self.customer_manager_group)
+    
+    # Test Cases
+    def test_customer_objs_count(self):
+        self.set_authorization_header()
+        self.set_manager_group()
+
+        response = self.api_client.get(self.customer_list_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['count'], 4)
+
+    def test_customer_create(self):
+        self.set_authorization_header()
+        self.set_manager_group()
+
+        response = self.api_client.post(self.customer_list_url, {})
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+    
+    def test_customer_create_through_user(self):
+        self.set_authorization_header()
+        self.set_manager_group()
+
+        test_user = get_user_model().objects.create_user(
+            username = 'test_user',
+            email = 'testuser@gmail.com',
+            password = 'usertest',
+        )
+
+        response = self.api_client.get(self.customer_list_url, {'search': test_user.username})
+        self.assertEqual(response.data['count'], 1)
+
+    def test_customer_update(self):
+        self.set_authorization_header()
+        self.set_manager_group()
+
+        response = self.api_client.put(self.customer_detail_url, {'birth_date': '2022-06-15'})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn(self.api_client.get(self.customer_detail_url).data['birth_date'], '2022-06-15')
+
+    def test_customer_delete(self):
+        self.set_authorization_header()
+        self.set_manager_group()
+
+        response = self.api_client.delete(self.customer_list_url)
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+    
+    def test_customer_valid_and_invalid_lookup_field(self):
+        self.set_authorization_header()
+        self.set_manager_group()
+
+        response = self.api_client.get(self.customer_detail_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        invalid_customer_detail = reverse('customer-detail', args=[100])
+        response = self.api_client.get(invalid_customer_detail)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+    
+    def test_customer_default_queryset_ordering(self):
+        self.set_authorization_header()
+        self.set_manager_group()
+
+        response = self.api_client.get(self.customer_list_url)
+        results = [result['id'] for result in response.data['results']]
+        self.assertEqual(results, [self.customer_obj.id, self.customer_1.id, self.customer_2.id, self.customer_3.id])
+
+    def test_customer_with_no_address_filter(self):
+        self.set_authorization_header()
+        self.set_manager_group()
+
+        response = self.api_client.get(self.customer_list_url, {'no_address': True})
+        results = [result['id'] for result in response.data['results']]
+        self.assertEqual(response.data['count'], 3)
+        self.assertEqual(results, [self.customer_1.id, self.customer_2.id, self.customer_3.id])
+        self.assertNotIn(self.customer_obj.id, results)
+    
+    def test_customer_with_address_filter(self):
+        self.set_authorization_header()
+        self.set_manager_group()
+
+        response = self.api_client.get(self.customer_list_url, {'no_address': False})
+        self.assertEqual(response.data['count'], 1)
+        self.assertEqual(response.data['results'][0]['id'], self.customer_obj.id)
+    
+    def test_customer_search_by_username_filter(self):
+        self.set_authorization_header()
+        self.set_manager_group()
+
+        for user in [self.user_1, self.user_2, self.user_3]:
+            url = self.customer_list_url + f'?search={user.username}'
+            response = self.api_client.get(url)
+            self.assertEqual(response.data['count'], 1)
+            self.assertEqual(response.data['results'][0]['user'], user.username)
+        
+    def test_customer_pagination(self):
+        self.set_authorization_header()
+        self.set_manager_group()
+
+        response = self.api_client.get(self.customer_list_url, {'page_size': 2, 'page':1})
+        self.assertEqual(len(response.data['results']), 2)
+        self.assertIsNotNone(response.data['next'])
+        self.assertIsNone(response.data['previous'])
+
+        response = self.api_client.get(self.customer_list_url, {'page_size': 2, 'page': 2})
+        self.assertEqual(len(response.data['results']), 2)
+        self.assertIsNotNone(response.data['previous'])
+        self.assertIsNone(response.data['next'])
+
+    def test_customer_me_action_get(self):
+        self.set_authorization_header()
+
+        response = self.api_client.get(self.customer_me_action_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('birth_date', response.data)
+        self.assertIn('address', response.data)
+        self.assertIn('address', response.data)
+    
+    def test_customer_me_action_update(self):
+        self.set_authorization_header()
+
+        response = self.api_client.put(self.customer_me_action_url, {'birth_date': '2015-06-15'})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(self.api_client.get(self.customer_me_action_url).data['birth_date'], '2015-06-15')
+    
+    def test_customer_me_action_delete(self):
+        self.set_authorization_header()
+
+        response = self.api_client.delete(self.customer_me_action_url)
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+    
+    def test_customer_me_action_detail(self):
+        self.set_authorization_header()
+
+        customer_me_detail = reverse('customer-list') + f'me/{10}'
+        response = self.api_client.get(customer_me_detail)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+

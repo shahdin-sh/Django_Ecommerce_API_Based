@@ -48,7 +48,7 @@ class CustomerWithOutAddress(filters.FilterSet):
     def filter_no_address(self, queryset, name, value):
         if value:
             return queryset.filter(address__isnull=True)
-        return queryset.all()
+        return queryset.filter(address__isnull=False)
 
 
 class OrderFilter(filters.FilterSet):
