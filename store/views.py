@@ -137,7 +137,7 @@ class CartItemViewSet(ModelViewSet):
 
     def get_queryset(self):
         cart_id = self.kwargs['cart_id']
-        return CartItem.objects.select_related('cart', 'product').filter(cart__id=cart_id).all()
+        return CartItem.objects.select_related('cart', 'product').filter(cart__id=cart_id).order_by('-quantity')
     
 
     def create(self, request, *args, **kwargs):

@@ -120,12 +120,10 @@ class AddItemtoCartSerializer(serializers.ModelSerializer):
         super().__init__(*args, **kwargs)
         cart = self.context.get('cart')
 
-        cart_product_ids = []
         try:
             for item in cart.items.all():
-                cart_product_ids.append(item.product.id)
+                self.fields['product'].queryset = Product.active.exclude(id=item.product.id)
 
-            self.fields['product'].queryset = Product.active.exclude(id__in=cart_product_ids)
         except AttributeError:
             return None
 
@@ -137,7 +135,7 @@ class AddItemtoCartSerializer(serializers.ModelSerializer):
         #  Perform custom validation checks 
         if quantity < 1:
             raise serializers.ValidationError('quantity must be greater or equal to 1')
-        elif  quantity > product.inventory:
+        if  quantity > product.inventory:
             raise serializers.ValidationError(f'quantity must be less than {product.name} inventory | < {product.inventory }')
         else:
             self.instance = CartItem.objects.create(cart_id=cart_id, **validated_data)

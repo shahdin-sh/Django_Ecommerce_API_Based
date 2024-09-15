@@ -106,8 +106,11 @@ class CartUrlsTests(APITestCase):
         self.cartitems = self.mock_objs.cartitems_obj
         self.cart_list_url = reverse('cart-list')
         self.cart_detail_url = reverse('cart-detail', args=[self.cart.id])
-        self.cartitems_list_url = self.cart_detail_url + 'items/'
-        self.cartitems_detail_url = self.cart_detail_url + f'items/{self.cartitems.id}/'
+        self.cartitems_list_url = reverse('cart-items-list', kwargs={'cart_id': self.cart.id})
+        self.cartitems_detail_url = reverse('cart-items-detail', kwargs={
+            'cart_id': self.cart.id,
+            'pk': self.cartitems.id
+        })
     
     # Test Methods
     def test_cart_urls_resolves(self):

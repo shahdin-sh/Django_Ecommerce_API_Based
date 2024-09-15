@@ -5,10 +5,11 @@ from rest_framework import status
 
 from django.contrib.auth.models import Group
 from django.urls.exceptions import NoReverseMatch
+from django.db.utils import IntegrityError
 
-from store.models import Product, Category, Comment, Cart
+from store.models import Product, Category, Comment, Cart, CartItem
+from store.serializers import CartItemSerializer, AddItemtoCartSerializer
 from store.test.helpers.base_helper import MockObjects, UserAuthHelper, GenerateAuthToken
-from store.views import CommentViewSet
 
 class ProductViewSetTests(APITestCase):
     def setUp(self):
@@ -489,7 +490,6 @@ class CartViewSetTests(APITestCase):
         self.user_auth_helper = UserAuthHelper()
         self.user_obj = self.mock_objs.user_obj
         self.cart_obj = self.mock_objs.cart_obj
-        self.cartitems_obj = self.mock_objs.cartitems_obj
         self.cart_list_url = reverse('cart-list')
         self.cart_detail_url = reverse('cart-detail', args=[self.cart_obj.id])
 
@@ -529,7 +529,7 @@ class CartViewSetTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
     
     def test_cart_delete(self):
-        # testining with more detail of different users access in test_endpoints.py 
+        # testing with more detail of different users access in test_endpoints.py 
         self.set_authorization_header()
 
         response = self.api_client.delete(self.cart_list_url)
@@ -586,3 +586,191 @@ class CartViewSetTests(APITestCase):
                 (reverse('cart-detail', args=[invalid_cart_ids]))
 
             self.assertIn(invalid_cart_ids, str(context.exception))
+
+
+class CartItemViewSetTests(APITestCase):
+    def setUp(self):
+        self.api_client = APIClient()
+        self.mock_objs = MockObjects()
+        self.auth_token = GenerateAuthToken().generate_auth_token()
+        self.user_auth_helper = UserAuthHelper()
+        self.user_obj = self.mock_objs.user_obj
+        self.cart_obj = self.mock_objs.cart_obj
+        self.product_obj = self.mock_objs.product_obj
+        self.cartitems_obj = self.mock_objs.cartitems_obj
+        self.cartitems_list_url = reverse('cart-items-list', kwargs={'cart_id': self.cart_obj.id})
+        self.cartitems_detail_url = reverse('cart-items-detail', 
+            kwargs = {
+                'cart_id': self.cart_obj.id,
+                'pk': self.cartitems_obj.id
+            }
+        )
+        
+        # different cartitems objs, 4 in total
+        self.cartitems_1 = CartItem.objects.create(
+            cart = self.cart_obj,
+            product = Product.objects.create(
+                name = 'product_item1',
+                category = self.mock_objs.category_obj,
+                slug = 'product-item1',
+                unit_price =  '10000',
+                inventory = 7, 
+            ),
+            quantity = 6
+        )
+        self.cartitems_2 = CartItem.objects.create(
+            cart = self.cart_obj,
+            product = Product.objects.create(
+                name = 'product_item2',
+                category = self.mock_objs.category_obj,
+                slug = 'product-item2',
+                unit_price =  '20000',
+                inventory = 5, 
+            ),
+            quantity = 4
+        )
+        self.cartitems_3 = CartItem.objects.create(
+            cart = self.cart_obj,
+            product = Product.objects.create(
+                name = 'product_item3',
+                category = self.mock_objs.category_obj,
+                slug = 'product-item3',
+                unit_price =  '10000',
+                inventory = 2, 
+            ),
+            quantity = 1
+        )
+    
+    def set_authorization_header(self):
+        self.user_auth_helper.set_authorization_header(self.api_client, self.auth_token)
+     
+    # Test Cases
+    def test_cartitem_objects_count(self):
+        self.set_authorization_header()
+
+        response = self.api_client.get(self.cartitems_list_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 4)
+    
+    def test_cartitem_create(self):
+        self.set_authorization_header()
+
+        test_product = Product.objects.create(
+            name = 'test product',
+            category = self.mock_objs.category_obj,
+            slug = 'test-product',
+            unit_price =  '10000',
+            inventory = 20, 
+        )
+
+        data = {
+            'product': test_product.id,
+            'quantity': 5
+        }
+
+        response = self.api_client.post(self.cartitems_list_url, data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        # check product stock after creation
+        product_stock_after_creation = test_product.inventory - data['quantity']
+        self.assertEqual(response.data['current_product_stock'], product_stock_after_creation)
+    
+    def test_cartitem_create_with_in_usage_product(self):
+        self.set_authorization_header()
+
+        # use in creating self.cartitem_obj
+        in_used_product = self.product_obj
+
+        data = {
+            'product': in_used_product.id,
+            'quantity': 4
+        }
+        
+        with self.assertRaises(IntegrityError) as context:
+            self.api_client.post(self.cartitems_list_url, data)
+        
+        self.assertIn((f'{self.cart_obj.id}, {self.product_obj.id}'), str(context.exception))
+    
+    def test_cartitem_create_quantity_input_validation(self):
+        self.set_authorization_header()
+
+        self.assertTrue(self.product_obj.inventory == 7)
+
+        test_data = [
+            {'quantity': 8, 'error_msg': f'["quantity must be less than {self.product_obj.name} inventory"]'},
+            {'quantity': 0, 'error_msg': '["quantity must be greater or equal to 1"]'}
+        ]
+
+        for data in test_data:
+            response = self.api_client.put(self.cartitems_detail_url, {'quantity': data['quantity']})
+            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+            self.assertEqual(data['error_msg'], response.content.decode('utf-8'))
+    
+    def test_cartitem_update(self):
+        self.set_authorization_header()
+
+        data = {'quantity': 1}
+
+        response = self.api_client.put(self.cartitems_detail_url, data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+    
+    def test_cartitem_delete(self):
+        # testing with more detail of different users access in test_endpoints.py 
+        self.set_authorization_header()
+
+        response = self.api_client.delete(self.cartitems_list_url)
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def test_cartitem_valid_and_invalid_lookup_field(self):
+        self.set_authorization_header()
+
+        response = self.api_client.get(self.cartitems_detail_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        with self.assertRaises(NoReverseMatch):
+            reverse('cart-items-detail', kwargs={'cart_id': self.cart_obj, 'pk': 100})
+    
+    def test_cartitem_valid_and_invalid_cart_id(self):
+        self.set_authorization_header()
+
+        response = self.api_client.get(self.cartitems_list_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        with self.assertRaises(NoReverseMatch):
+            reverse('cart-items-detail', kwargs={'cart_id': 100, 'pk': self.cartitems_obj})
+    
+    def test_cartitem_default_queryset_ordering(self):
+        self.set_authorization_header()
+
+        response = self.api_client.get(self.cartitems_list_url)
+        results = [result['id'] for result in response.data]
+        self.assertEqual(results, [self.cartitems_obj.id, self.cartitems_1.id, self.cartitems_2.id, self.cartitems_3.id])
+    
+    def test_cartitem_get_serializer_class(self):
+        self.set_authorization_header()
+
+        serializer_class_data  = [
+            {'response': self.api_client.post(self.cartitems_list_url), 'serializer_class': AddItemtoCartSerializer},
+            {'response': self.api_client.get(self.cartitems_list_url), 'serializer_class': CartItemSerializer}
+        ]
+
+        for data in serializer_class_data:
+            view = data['response'].wsgi_request.resolver_match.func.cls()
+            view.request = data['response'].wsgi_request
+
+            self.assertEqual(view.get_serializer_class(), data['serializer_class'])
+
+    def test_cartitem_pagination(self):
+        self.set_authorization_header()
+
+        response = self.api_client.get(self.cartitems_list_url, {'page_size': 2})
+
+        respones_data = response.json()
+
+        self.assertNotIn('next', respones_data)
+        self.assertNotIn('previous', respones_data)
+        self.assertNotIn('count', respones_data)
+        self.assertNotEqual(len(respones_data), 2)
+
+        # check that response is a list and not a paginated structure
+        self.assertIsInstance(respones_data, list)
