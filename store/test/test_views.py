@@ -8,8 +8,15 @@ from django.contrib.auth.models import Group
 from django.db.utils import IntegrityError
 from django.urls.exceptions import NoReverseMatch
 
-from store.models import Product, Category, Comment, Cart, CartItem, Customer
-from store.serializers import CartItemSerializer, AddItemtoCartSerializer
+from store.models import Product, Category, Comment, Cart, CartItem, Customer, Address
+from store.serializers import (
+    CartItemSerializer, 
+    AddItemtoCartSerializer,
+    ManagerAddressSerializer,
+    ManagersAddAddressSerializer,
+    AddAddressSerializer,
+    AddressSerializer
+)
 from store.test.helpers.base_helper import MockObjects, UserAuthHelper, GenerateAuthToken
 
 class ProductViewSetTests(APITestCase):
@@ -951,4 +958,319 @@ class CustomerViewSetTests(APITestCase):
         response = self.api_client.get(customer_me_detail)
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
+
+class AddressViewSetTests(APITestCase):
+    def setUp(self):
+        self.api_client = APIClient()
+        self.mock_objs = MockObjects()
+        self.auth_token = GenerateAuthToken().generate_auth_token()
+        self.user_auth_helper = UserAuthHelper()
+        self.user_obj = self.mock_objs.user_obj
+        self.customer_obj = self.mock_objs.customer_obj
+        self.address_obj = self.mock_objs.address_obj
+        self.address_list_url = reverse('address-list')
+        self.address_detail_url = reverse('address-detail', args=[self.address_obj.pk])
+
+        self.user_a = get_user_model().objects.create_user(
+            username = 'usernamea',
+            email = 'usernamea@gmail.com',
+            password = 'user1',
+        )
+        self.user_b = get_user_model().objects.create_user(
+            username = 'usernameb',
+            email = 'usernameb@gmail.com',
+            password = 'user2',
+        )
+        self.user_c = get_user_model().objects.create_user(
+            username = 'usernamec',
+            email = 'usernamec@gmail.com',
+            password = 'user3',
+        )
+
+        # different address objs, 4 in total
+        self.address_1 = Address.objects.create(
+            customer = Customer.objects.get(user=self.user_a),
+            province = 'province 1',
+            city = 'city 1',
+            street = 'street number 1'
+        )
+        self.address_2 = Address.objects.create(
+            customer = Customer.objects.get(user=self.user_b),
+            province = 'province 2',
+            city = 'city 2',
+            street = 'street number 2'
+        )
+        self.address_3 = Address.objects.create(
+            customer = Customer.objects.get(user=self.user_c),
+            province = 'province 3',
+            city = 'city 3',
+            street = 'street number 3'
+        )
+        # error from creating the same user as upper class, lead to unique constraints, but why?
+
+        self.customer_manager_group = Group.objects.create(name='Customer Manager')
+    
+    def set_authorization_header(self):
+        self.user_auth_helper.set_authorization_header(self.api_client, self.auth_token)
+    
+    def set_manager_group(self):
+        self.user_auth_helper.set_or_unset_manager_groups(True, self.user_obj, manager_group=self.customer_manager_group)
+    
+    # Test Cases
+    def test_address_objs_count_for_managers_and_users(self):
+        self.set_authorization_header()
+
+        response = self.api_client.get(self.address_list_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)
+
+        self.set_manager_group()
+        response = self.api_client.get(self.address_list_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['count'], 4)
+
+    def test_address_create_for_managers(self):
+        self.set_authorization_header()
+        self.set_manager_group()
+
+        test_customer = Customer.objects.get(
+            user = get_user_model().objects.create(
+                username='test user',
+                email='testuser@gmail.com',
+                password='testpass123'
+            )
+        )
+
+        data = {
+            'customer': test_customer.id,
+            'province': 'test province',
+            'city': 'test city',
+            'street': 'test street'
+        }
+        
+        post_response = self.api_client.post(self.address_list_url, data)
+        self.assertEqual(post_response.status_code, status.HTTP_200_OK)
+
+        address_pk = Address.objects.get(customer=test_customer).pk
+        expected_data = {
+            'pk': address_pk,
+            'user': 'test user',
+            'detail': f'http://testserver/store/addresses/{address_pk}/',
+            'customer':  f'http://testserver/store/customers/{test_customer.id}/',
+            'province': data['province'],
+            'city': data['city'],
+            'street': data['street']
+        }
+
+        get_response = self.api_client.get(self.address_list_url, {'search': 'test user'})
+        self.assertDictEqual(get_response.data['results'][0], expected_data)
+
+    def test_address_create_for_customers_already_with_address_for_managers(self):
+        self.set_authorization_header()
+        self.set_manager_group()
+
+        data = {
+            'customer': self.customer_obj.id,
+            'city': "test city",
+            'province': "test province",
+            'street': "test street",
+        }
+
+        response = self.api_client.post(self.address_list_url, data)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        # manager address serializer will remove customers that already has address from the customer field
+        self.assertEqual(
+            response.json(), 
+            {'customer': [f'Invalid pk "{self.customer_obj.id}" - object does not exist.']}
+        ) 
+    
+    def test_address_create_for_users(self):
+        self.set_authorization_header()
+
+        Address.objects.get(customer=self.customer_obj).delete()
+
+        data = {
+            'city': "test city",
+            'province': "test province",
+            'street': "test street"
+        }
+
+        post_response = self.api_client.post(self.address_list_url, data)
+        self.assertEqual(post_response.status_code, status.HTTP_200_OK)
+
+        address_pk = Address.objects.get(customer=self.customer_obj).pk
+        expected_data = [{
+            "province": data['province'],
+            "city": data['city'],
+            "street": data['street'],
+            "detail": f"http://testserver/store/addresses/{address_pk}/"
+        }]
+
+        get_response = self.api_client.get(self.address_list_url, {'search': 'username'})
+        self.assertEqual(get_response.json(), expected_data)
+    
+    
+    def test_address_create_for_customers_already_with_address_for_users(self):
+        self.set_authorization_header()
+
+        data = {
+            'city': "test city",
+            'province': "test province",
+            'street': "test street"
+        }
+
+        response = self.api_client.post(self.address_list_url, data)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.json(),  {'non_field_errors': ['address has already created.']})
+    
+    def test_address_create_request_via_serializer_context_for_users(self):
+        auth_token = GenerateAuthToken().generate_auth_token(
+            username='usernamea', 
+            password='user1'
+        )
+        self.user_auth_helper.set_authorization_header(self.api_client, auth_token)
+
+        data = {
+            'city': "test city",
+            'province': "test province",
+            'street': "test street"
+        }
+
+        response = self.api_client.post(self.address_list_url, data)
+        view = response.wsgi_request.resolver_match.func.cls()
+        view.request = response.wsgi_request
+        view.format_kwarg = None
+        serializer = view.get_serializer()
+        
+        self.assertIn('request', serializer.context)
+        self.assertEqual(serializer.context['request'].user, self.user_a)
+
+    def test_address_update_for_manager(self):
+        self.set_authorization_header()
+        self.set_manager_group()
+
+        data = {
+            'province': 'canada',
+            'city': 'torento',
+            'street': self.address_3.street
+        }
+
+        address_detail = reverse('address-detail', args=[self.address_3.pk])
+        response = self.api_client.put(address_detail, data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        [self.assertIn(data[key], response.data[key]) for key in data]
+    
+    def test_address_update_for_user(self):
+        self.set_authorization_header()
+
+        data = {
+            'province': 'canada',
+            'city': 'torento',
+            'street': self.address_obj.street
+        }
+
+        user_address = self.address_detail_url
+        response = self.api_client.put(user_address, data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        [self.assertIn(data[key], response.data[key]) for key in data]
+    
+    def test_address_delete_for_managers(self):
+        self.set_authorization_header()
+        self.set_manager_group()
+
+        response = self.api_client.delete(self.address_detail_url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+    
+    def test_address_delete_for_users(self):
+        self.set_authorization_header()
+
+        response = self.api_client.delete(self.address_detail_url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_address_valid_and_invalid_lookup_field(self):
+        self.set_authorization_header()
+
+        response = self.api_client.get(self.address_detail_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        invalid_address_detail = reverse('address-detail', args=[self.address_1.pk])
+        response = self.api_client.get(invalid_address_detail)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertIn('No Address matches the given query.', response.content.decode('utf-8'))
+
+    def test_address_default_queryset_ordering_for_managers(self):
+        self.set_authorization_header()
+        self.set_manager_group()
+
+        response = self.api_client.get(self.address_list_url)
+        results = [result['pk'] for result in response.data['results']]
+        self.assertEqual(results, [self.address_obj.pk, self.address_1.pk, self.address_2.pk, self.address_3.pk])
+
+    def test_address_get_serializer_class_for_managers(self):
+        self.set_authorization_header()
+        self.set_manager_group()
+
+        serializer_class_data  = [
+            {'response': self.api_client.get(self.address_list_url), 'serializer_class': ManagerAddressSerializer},
+            {'response': self.api_client.post(self.address_list_url), 'serializer_class': ManagersAddAddressSerializer},
+            {'response': self.api_client.put(self.address_detail_url), 'serializer_class': AddressSerializer}
+        ]
+
+        for data in serializer_class_data:
+            view = data['response'].wsgi_request.resolver_match.func.cls()
+            view.request = data['response'].wsgi_request
+
+            self.assertEqual(view.get_serializer_class(), data['serializer_class'])
+    
+    def test_address_get_serializer_class_for_users(self):
+        self.set_authorization_header()
+
+        serializer_class_data  = [
+            {'response': self.api_client.get(self.address_list_url), 'serializer_class': AddressSerializer},
+            {'response': self.api_client.post(self.address_list_url), 'serializer_class': AddAddressSerializer},
+            {'response': self.api_client.put(self.address_detail_url), 'serializer_class': AddressSerializer}
+        ]
+
+        for data in serializer_class_data:
+            view = data['response'].wsgi_request.resolver_match.func.cls()
+            view.request = data['response'].wsgi_request
+
+            self.assertEqual(view.get_serializer_class(), data['serializer_class'])
+
+    def test_address_search_by_customer_user_username_filter(self):
+        self.set_authorization_header()
+        self.set_manager_group()
+
+        response = self.api_client.get(self.address_list_url, {'search': self.address_1.customer.user.username})
+        self.assertEqual(response.data['count'], 1)
+        self.assertEqual(response.data['results'][0]['pk'], self.address_1.pk)
+
+    def test_address_pagination_for_managers(self):
+        self.set_authorization_header()
+        self.set_manager_group()
+
+        response = self.api_client.get(self.address_list_url, {'page': '1', 'page_size': '2'})
+        self.assertEqual(len(response.data['results']), 2)
+        self.assertIsNotNone(response.data['next'])
+        self.assertIsNone(response.data['previous'])
+
+        response = self.api_client.get(self.address_list_url, {'page': '2', 'page_size': '2'})
+        self.assertEqual(len(response.data['results']), 2)
+        self.assertIsNone(response.data['next'])
+        self.assertIsNotNone(response.data['previous'])
+
+    def test_address_pagination_for_users(self):
+        self.set_authorization_header()
+
+        response = self.api_client.get(self.address_list_url, {'page': '1', 'page_size': 1})
+
+        respones_data = response.json()
+
+        self.assertNotIn('next', respones_data)
+        self.assertNotIn('previous', respones_data)
+        self.assertNotIn('count', respones_data)
+        self.assertNotEqual(len(respones_data), 2)
+
+        # check that response is a list and not a paginated structure
+        self.assertIsInstance(respones_data, list)
 

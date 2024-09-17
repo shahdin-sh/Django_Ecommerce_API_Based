@@ -1,7 +1,6 @@
 import requests, json
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Count, Prefetch
-from django.http import HttpResponse
 from django.shortcuts import redirect, get_object_or_404
 
 from rest_framework import status
@@ -78,7 +77,7 @@ class CategoryViewSet(ModelViewSet):
             )
         
         category.delete()
-        return HttpResponse(status=status.HTTP_404_NOT_FOUND)
+        return Response(status=status.HTTP_404_NOT_FOUND)
     
     def get_throttles(self):
         self.throttle_scope = 'category'
@@ -201,7 +200,7 @@ class CustomerViewSet(ModelViewSet):
 class AddressViewSet(ModelViewSet):
     filter_backends = [SearchFilter]
     search_fields = ['customer__user__username']
-    pagination_class = StandardResultSetPagination
+    pagination_class = None
 
     def is_manager(self):
         user = self.request.user
@@ -215,8 +214,10 @@ class AddressViewSet(ModelViewSet):
     def get_serializer_class(self):
         if self.request.method == 'POST':
             return ManagersAddAddressSerializer if self.is_manager() else AddAddressSerializer
-
-        return ManagerAddressSerializer if self.is_manager() else AddressSerializer
+        elif self.request.method == 'PUT':
+            return AddressSerializer
+        else:
+            return ManagerAddressSerializer if self.is_manager() else AddressSerializer
     
     def create(self, request, *args, **kwargs):
         if self.is_manager():
@@ -226,7 +227,7 @@ class AddressViewSet(ModelViewSet):
             creation_serializer = AddAddressSerializer
             serializer = AddressSerializer
         
-        creation_serializer = creation_serializer(data=request.data, context={'request' : request})
+        creation_serializer = creation_serializer(data=request.data, context={'request': request})
         creation_serializer.is_valid(raise_exception=True)
         created_address = creation_serializer.save()
 
@@ -234,10 +235,20 @@ class AddressViewSet(ModelViewSet):
 
         return Response(serializer.data, status=status.HTTP_200_OK)
     
-    # def destroy(self, request, *args, **kwargs):
-    #     # showing the proper data when the instance get deleted
-    #     pass
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        if self.is_manager():
+            self.pagination_class = StandardResultSetPagination
+            page = self.paginate_queryset(queryset)
+
+            if page:
+                serializer = self.get_serializer(page, many=True)
+                return self.get_paginated_response(serializer.data)
             
+        serializer = self.get_serializer(queryset ,many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
     def get_permissions(self):
         if self.request.method == 'DELETE':
             return [IsCustomerManager()]
