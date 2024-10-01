@@ -1,17 +1,19 @@
 # setup_test_data.py
-import random
-from faker import Faker
-from datetime import datetime, timedelta
+from config import settings
 import factory
-from factory.fuzzy import FuzzyDateTime
+import random
 
-from django.contrib.auth import get_user_model
+from datetime import datetime, timedelta
+from factory.fuzzy import FuzzyDateTime
+from faker import Faker
+
+from django.contrib.auth import get_user_model 
+from django.contrib.auth.models import Group
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.utils import timezone
 from django.utils.timezone import get_current_timezone
 from django.utils.timezone import make_aware
-from config import settings
 
 from store.models import Address, Cart, CartItem, Category, Comment, Order, OrderItem, Product, Discount, Customer
 from store.factories import (
@@ -30,6 +32,8 @@ from store.factories import (
 
 faker = Faker()
 
+User = get_user_model()
+
 list_of_models = [CartItem, Cart, OrderItem, Order, Product, Category, Comment, Discount, Address, Customer]
 
 NUM_CATEGORIES = 100
@@ -37,7 +41,7 @@ NUM_DISCOUNTS = 10
 NUM_PRODUCTS = 1000
 NUM_ORDERS = 30
 NUM_CARTS = 100
-NUM_USERS = 10
+NUM_USERS = 20
 
 class Command(BaseCommand):
     help = "Generates fake data"
@@ -48,7 +52,7 @@ class Command(BaseCommand):
         models = list_of_models
         for model in models:
             model.objects.all().delete()
-
+        [user.delete() for user in User.objects.exclude(is_superuser=True)]
         self.stdout.write("Creating new data...\n")
 
         tz = timezone.get_current_timezone()
@@ -57,6 +61,19 @@ class Command(BaseCommand):
         print(f"Adding {NUM_USERS} users...", end='')
         all_users = [UserFactory() for _ in range(NUM_USERS)]
         print('DONE')
+
+        # users groups
+        print(f"Adding groups to half of the users ")
+        randomized_users = random.sample(list(all_users), int(NUM_USERS / 2))
+        group_name_list = ['Product Manager', 'Content Manager', 'Customer Manager', 'Order Manager']
+
+        for user in randomized_users:
+            random_group_name = random.choice(group_name_list)
+            group = Group.objects.get(name=random_group_name)
+            user.groups.set([group])
+
+            user.is_staff = True
+            user.save()
 
         # Categories data
         print(f"Adding {NUM_CATEGORIES} categories...", end='')
@@ -80,9 +97,9 @@ class Command(BaseCommand):
         print('DONE')
 
         # Customers data
-        print(f"Adding customers...", end='')
-        for user in all_users:
-            all_customers = [CustomerFactory(birth_date=None, user=user)]
+        print(f"customers created when normal user created...", end='')
+        # customer instance will create for newly created user via signal
+        all_customers = Customer.objects.all()
         print('DONE')
 
         # Addresses data

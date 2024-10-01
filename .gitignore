@@ -8,5 +8,5 @@ __pycache__/
 /staticfiles
 /media
 /text.txt
-dj.bat
-run_db.bat
+.vscode/
+DS_*
