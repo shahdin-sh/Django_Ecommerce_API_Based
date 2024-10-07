@@ -8,14 +8,17 @@ from django.contrib.auth.models import Group
 from django.db.utils import IntegrityError
 from django.urls.exceptions import NoReverseMatch
 
-from store.models import Product, Category, Comment, Cart, CartItem, Customer, Address
+from store.models import Product, Category, Comment, Cart, CartItem, Customer, Address, Order, OrderItem
 from store.serializers import (
     CartItemSerializer, 
     AddItemtoCartSerializer,
     ManagerAddressSerializer,
     ManagersAddAddressSerializer,
     AddAddressSerializer,
-    AddressSerializer
+    AddressSerializer,
+    ManagerOrderSerializer,
+    OrderSerializer,
+    OrderCreationSerializer,
 )
 from store.test.helpers.base_helper import MockObjects, UserAuthHelper, GenerateAuthToken
 
@@ -1274,3 +1277,197 @@ class AddressViewSetTests(APITestCase):
         # check that response is a list and not a paginated structure
         self.assertIsInstance(respones_data, list)
 
+
+class OrderViewSetTests(APITestCase):
+    def setUp(self):
+        self.api_client = APIClient()
+        self.mock_objs = MockObjects()
+        self.auth_token = GenerateAuthToken().generate_auth_token()
+        self.user_auth_helper = UserAuthHelper()
+        self.user_obj = self.mock_objs.user_obj
+        self.order_obj = self.mock_objs.order_obj
+        self.order_list_url = reverse('order-list')
+        self.order_detail_url = reverse('order-detail', args=[self.order_obj.pk])
+
+        self.user_a = get_user_model().objects.create_user(
+            username = 'ua',
+            email = 'usernamea@gmail.com',
+            password = 'user1',
+        )
+        self.user_b = get_user_model().objects.create_user(
+            username = 'ubb',
+            email = 'usernameb@gmail.com',
+            password = 'user2',
+        )
+        self.user_c = get_user_model().objects.create_user(
+            username = 'uc',
+            email = 'usernamec@gmail.com',
+            password = 'user3',
+        )
+
+        # different Order objs, 4 in total
+        self.order_1 = Order.objects.create(
+            customer = Customer.objects.get(user=self.user_a),
+        )
+        self.order_2 = Order.objects.create(
+            customer = Customer.objects.get(user=self.user_b),
+        )
+        self.order_3 = Order.objects.create(
+            customer = Customer.objects.get(user=self.user_c),
+        )
+
+        self.order_manager_group = Group.objects.create(name='Order Manager')
+    
+    def set_authorization_header(self):
+        self.user_auth_helper.set_authorization_header(self.api_client, self.auth_token)
+    
+    def set_manager_group(self):
+        self.user_auth_helper.set_or_unset_manager_groups(True, self.user_obj, manager_group=self.order_manager_group)
+        
+    # Test Cases
+    def test_order_count_for_managers_and_users(self):
+        self.set_authorization_header()
+
+        response = self.api_client.get(self.order_list_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['count'], 1)
+
+        self.set_manager_group()
+
+        response = self.api_client.get(self.order_list_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['count'], 4)
+
+    def test_order_create(self):
+        self.set_authorization_header()
+
+        cart_obj = self.mock_objs.cart_obj
+
+        response = self.api_client.post(self.order_list_url, {'cart_uuid': cart_obj.id})
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        
+    def test_order_create_with_empty_cart_items(self):
+        self.set_authorization_header()
+
+        empty_cart_obj = Cart.objects.create()
+
+        response = self.api_client.post(self.order_list_url, {'cart_uuid': empty_cart_obj.id})
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+        error_msg = '{"cart_uuid":["You must at least have one item in your cart."]}'
+        self.assertEqual(error_msg, response.content.decode('utf-8'))
+
+    def test_order_create_with_invalid_uuid(self):
+        self.set_authorization_header()
+
+        invalid_cart_uuid = 'a2dbc6-a627bc416585202d151fe8b357i86'
+        response = self.api_client.post(self.order_list_url, {'cart_uuid': invalid_cart_uuid})
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+        error_msg = '{"cart_uuid":["Must be a valid UUID."]}'
+        self.assertEqual(error_msg, response.content.decode('utf-8')) 
+
+    def test_order_update_for_managers_and_users(self):
+        self.set_authorization_header()
+
+        response = self.api_client.put(self.order_detail_url, {'status': Order.ORDER_STATUS_PAID})
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.set_manager_group()
+
+        response = self.api_client.put(self.order_detail_url, {'status': Order.ORDER_STATUS_PAID})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['status'], 'paid')
+    
+    def test_order_delete_for_managers_and_users(self):
+        self.set_authorization_header()
+
+        response = self.api_client.delete(self.order_detail_url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.set_manager_group()
+
+        response = self.api_client.delete(self.order_detail_url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+       
+    def test_order_valid_and_invalid_lookup_field(self):
+        self.set_authorization_header()
+
+        response = self.api_client.get(self.order_detail_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        invalid_order_detail = reverse('order-detail', args=['10'])
+        response = self.api_client.get(invalid_order_detail)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertIn('No Order matches the given query.', response.content.decode('utf-8'))
+
+    def test_order_default_queryset_ordering(self):
+        self.set_authorization_header()
+        self.set_manager_group()
+
+        response = self.api_client.get(self.order_list_url)
+        results = [result['id'] for result in response.data['results']]
+        self.assertEqual(results, [self.order_3.id, self.order_2.id, self.order_1.id, self.order_obj.id])
+
+    def test_order_get_serializer_class_for_managers(self):
+        self.set_authorization_header()
+        self.set_manager_group()
+
+        response = self.api_client.get(self.order_list_url)
+        
+        view = response.wsgi_request.resolver_match.func.cls()
+        view.request = response.wsgi_request   
+        self.assertEqual(view.get_serializer_class(), ManagerOrderSerializer)
+           
+    def test_order_get_serializer_class_for_users(self):
+        self.set_authorization_header()
+
+        response = self.api_client.get(self.order_list_url)
+        
+        view = response.wsgi_request.resolver_match.func.cls()
+        view.request = response.wsgi_request   
+        self.assertEqual(view.get_serializer_class(), OrderSerializer)
+    
+    def test_order_creation_get_serializer_class(self):
+        self.set_authorization_header()
+        self.set_manager_group()
+
+        response = self.api_client.post(self.order_list_url)
+        
+        view = response.wsgi_request.resolver_match.func.cls()
+        view.request = response.wsgi_request   
+        self.assertEqual(view.get_serializer_class(), OrderCreationSerializer)
+
+    def test_order_search_by_customer_username_filter(self):
+        self.set_authorization_header()
+        self.set_manager_group()
+
+        response = self.api_client.get(self.order_list_url, {'search': self.order_obj.customer.user.username})
+        self.assertEqual(response.data['count'], 1)
+        self.assertEqual(response.data['results'][0]['customer']['id'], self.order_obj.customer.id)
+
+    def test_order_datatime_created_ordering_filter(self):
+        self.set_authorization_header()
+        self.set_manager_group()
+
+        ascending_order_response = self.api_client.get(self.order_list_url, {'ordering': 'datetime_created'})
+        results = [result['id'] for result in ascending_order_response.data['results']]
+        self.assertEqual(results, [self.order_obj.id, self.order_1.id, self.order_2.id, self.order_3.id])
+
+        descending_order_response = self.api_client.get(self.order_list_url, {'ordering': '-datetime_created'})
+        results = [result['id'] for result in descending_order_response.data['results']]
+        self.assertEqual(results, [self.order_3.id, self.order_2.id, self.order_1.id, self.order_obj.id])
+
+    def test_order_pagination(self):
+        self.set_authorization_header()
+        self.set_manager_group()
+
+        response = self.api_client.get(self.order_list_url, {'page_size': 2, 'page': 1})
+        self.assertEqual(len(response.data['results']), 2)
+        self.assertIsNotNone(response.data['next'])
+        self.assertIsNone(response.data['previous'])
+
+        response = self.api_client.get(self.order_list_url, {'page_size': 2, 'page': 2})
+        self.assertEqual(len(response.data['results']), 2)
+        self.assertIsNotNone(response.data['previous'])
+        self.assertIsNone(response.data['next'])

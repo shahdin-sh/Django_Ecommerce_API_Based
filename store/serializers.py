@@ -298,7 +298,7 @@ class CustomerSerializer(serializers.ModelSerializer):
         fields = ['birth_date', 'address', 'address_info']
     
     def get_address_info(self, obj:Customer):
-        url = 'http://127.0.0.1:8000' + reverse('address-list')
+        url = 'http://0.0.0.0:8000' + reverse('address-list')
         address = Address.objects.filter(customer=obj)
 
         if address.exists():
