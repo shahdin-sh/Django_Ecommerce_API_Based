@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+}
+
+.wrapper {
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+.flexRow{
+  display: flex;
+  flex-flow: row nowrap;
+}
+
+.flexCol{
+  display: flex;
+  flex-flow: column nowrap;
+}
