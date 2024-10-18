@@ -40,6 +40,7 @@ class Product(models.Model):
     datetime_modified = models.DateTimeField(auto_now=True)
     discounts = models.ManyToManyField(Discount, blank=True)
     activation = models.BooleanField(default=True)
+    image = models.ImageField(upload_to='sample/', blank=True, null=True)
 
     objects = models.Manager()
     active = ActiveProductManager()

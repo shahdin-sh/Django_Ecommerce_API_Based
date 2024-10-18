@@ -27,7 +27,7 @@ SECRET_KEY = 'django-insecure-srk=o2$)2#z6tjkosgwbn9-g(f9g^v@qwu2n2tva0z5mnh9r73
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['0.0.0.0']
+ALLOWED_HOSTS = ['0.0.0.0', 'localhost',  "10e9-51-210-71-107.ngrok-free.app"]
 
 
 # Application definition
@@ -47,7 +47,8 @@ INSTALLED_APPS = [
     'debug_toolbar',
     'django_filters',
     'phonenumber_field',
-    'drf_yasg'
+    'drf_yasg',
+    'corsheaders',
 ]
 
 MIDDLEWARE = [
@@ -60,6 +61,8 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     # debug toolbar middleware
     'debug_toolbar.middleware.DebugToolbarMiddleware',
+    # corsheaders middleware
+    'corsheaders.middleware.CorsMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -190,16 +193,16 @@ REST_FRAMEWORK = {
         'store.renderers.PlainTextRenderer',
     ],
     'DEFAULT_THROTTLE_RATES': {
-        'anon': '50/day',
-        'user': '100/day',
+        'anon': '10000/day',
+        'user': '10000/day',
         # custom rates
-        'product': '170/day',
-        'category': '170/day',
-        'comment': '170/day',
-        'customer': '170/day',
-        'address': '170/day',
-        'order': '170/day',
-        'payment': '20/day', 
+        'product': '10000/day',
+        'category': '10000/day',
+        'comment': '10000/day',
+        'customer': '10000/day',
+        'address': '10000/day',
+        'order': '10000/day',
+        'payment': '10000/day', 
     },
     # 'DEFAULT_THROTTLE_CLASSES': [
     #     'rest_framework.throttling.AnonRateThrottle',
@@ -250,3 +253,21 @@ EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 #         'LOCATION': '127.0.0.1:11211',
 #     }
 # }
+
+# django corse config
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "https://10e9-51-210-71-107.ngrok-free.app",
+]
+
+CORS_ALLOW_HEADERS = [
+    'ngrok-skip-browser-warning',
+    # Add any other custom headers you need to allow
+]
+
+# If you want to allow all origins, use the following line (use with caution):
+CORS_ALLOW_ALL_ORIGINS = True  # OR CORS_ALLOWED_ORIGINS = ['https://your-frontend-url.com']
+
+# Media Configuration
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
