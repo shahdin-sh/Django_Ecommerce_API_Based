@@ -1,0 +1,51 @@
+@keyframes menuOpen {
+  0%{
+    transform: translateX(-100%);
+  }
+  100%{
+    transform: translateX(0);
+  }
+}
+
+.menuOpen{
+  animation: menuOpen 0.5s forwards;
+}
+
+@keyframes bgFadeIn {
+  0%{
+    opacity: 0;
+  }
+  100%{
+    opacity: 1;
+  }
+}
+
+.bgFadeIn{
+  animation: bgFadeIn 0.5s forwards;
+}
+
+@keyframes menuClose {
+  0%{
+    transform: translateX(0);
+  }
+  100%{
+    transform: translateX(-100%);
+  }
+}
+
+.menuClose{
+  animation: menuClose 0.5s forwards;
+}
+
+@keyframes bgFadeOut {
+  0%{
+    opacity: 1;
+  }
+  100%{
+    opacity: 0;
+  }
+}
+
+.bgFadeOut{
+  animation: bgFadeOut 0.5s forwards;
+}

@@ -1,0 +1,11 @@
+.NewProductsSlider .swiper-slide {
+  height: 340px;
+  text-align: center;
+  font-size: 18px;
+  background: rgb(241, 241, 241);
+
+  /* Center slide text vertically */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}

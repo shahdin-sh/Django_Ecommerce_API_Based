@@ -1,0 +1,16 @@
+.Brands .swiper-slide {
+  text-align: center;
+  font-size: 18px;
+  background: #fff;
+  opacity: 0.5;
+  /* Center slide text vertically */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+transition: 300ms;
+
+  &:hover{
+    opacity: 1;
+  }
+}

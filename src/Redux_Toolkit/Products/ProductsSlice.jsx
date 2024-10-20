@@ -2,7 +2,7 @@ import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import axios from "axios";
 
 export const fetchProducts = createAsyncThunk("fetch/products/", async () => {
-  const res = await axios.get("https://10e9-51-210-71-107.ngrok-free.app/store/products/", {
+  const res = await axios.get("http://0.0.0.0:8000/store/products/", {
     headers: {
       "ngrok-skip-browser-warning": true,
     },

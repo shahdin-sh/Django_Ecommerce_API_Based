@@ -1,0 +1,9 @@
+.bgImage {
+  background-image: url("../../../../public/images/discountBanner/banner_large.jpg");
+  background-position-x: 50%;
+  background-position-y: 50%;
+  background-origin: padding-box;
+  background-clip: border-box;
+  background-size: cover;
+  background-repeat: no-repeat;
+}

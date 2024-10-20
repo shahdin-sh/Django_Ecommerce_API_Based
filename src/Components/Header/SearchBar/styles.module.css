@@ -1,0 +1,26 @@
+@keyframes searchShow {
+  0% {
+    width: 0;
+  }
+
+  100% {
+    width: 275px;
+  }
+}
+
+.searchShow {
+  animation: searchShow 0.3s forwards;
+}
+
+@keyframes searchClose {
+  0% {
+    width: 275px;
+  }
+  100% {
+    width: 0;
+  }
+}
+
+.searchClose {
+  animation: searchClose 0.3s forwards;
+}
