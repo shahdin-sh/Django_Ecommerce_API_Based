@@ -5,19 +5,20 @@ from django.shortcuts import redirect, get_object_or_404
 
 from rest_framework import status
 from rest_framework.decorators import action
+from rest_framework.exceptions import NotFound
 from rest_framework.filters import OrderingFilter, SearchFilter
+from rest_framework.permissions import AllowAny
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle, AnonRateThrottle, ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
-from rest_framework.exceptions import ValidationError
 
 from .serializers import *
 from .filters import ProductFilter, OrderFilter, CustomerWithOutAddress
 from .models import Product, Category, Comment, Cart, CartItem, Customer, Address, Order, OrderItem
 from .paginations import StandardResultSetPagination, LargeResultSetPagination
-from .permissions import IsAdminOrReadOnly, IsProductManager, IsContentManager, IsCustomerManager, IsAdmin, IsOrderManager
+from .permissions import IsAdminOrReadOnly, IsProductManager, IsContentManager, IsCustomerManager, IsAdmin, IsOrderManager 
 from .throttle import AdminUserThrottle, BaseThrottleView
 
 
@@ -110,16 +111,42 @@ class CommentViewSet(ModelViewSet):
 
 # Cart View
 class CartViewSet(ModelViewSet):
-    http_method_names = ['get', 'post', 'delete', 'options', 'head']
+    http_method_names = ['get', 'put', 'delete', 'options', 'head']
     serializer_class = CartSerializer
     queryset = Cart.objects.prefetch_related(
         Prefetch('items', queryset=CartItem.objects.select_related('product'))
         ).all().order_by('-created_at')
     lookup_field = 'id'
     pagination_class = StandardResultSetPagination
-    # permission_classes = [IsAuthenticated]
     lookup_value_regex = '[0-9A-Za-z]{8}\-?[0-9A-Za-z]{4}\-?[0-9A-Za-z]{4}\-?[0-9A-Za-z]{4}\-?[0-9A-Za-z]{12}'
 
+    def get_queryset(self):
+        user = self.request.user
+        queryset =  Cart.objects.prefetch_related(
+                        Prefetch('items', queryset=CartItem.objects.select_related('product'))
+                        )
+
+        if user.is_authenticated:
+            if user.is_superuser or user.groups.filter(name='Order Manager').exists():
+                return queryset.all().order_by('-created_at')
+            else:
+                carts = queryset.filter(user=user)
+        else:
+            carts = queryset.filter(session_key=self.request.session.session_key)
+
+        if not carts.exists():
+            raise NotFound()
+    
+    def paginate_queryset(self, queryset):
+        user = self.request.user
+        if user.is_authenticated and (user.is_superuser or user.groups.filter(name='Order Manager').exists()):
+            return super().paginate_queryset(queryset)
+
+    def get_permissions(self):
+        if self.request.method in ['PUT', 'DELETE']:
+            return [IsOrderManager()]
+        return [AllowAny()]
+        
     def get_throttles(self):
         return base_throttle.get_throttles(self.request)
 
