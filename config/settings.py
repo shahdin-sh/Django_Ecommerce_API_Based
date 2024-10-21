@@ -27,7 +27,7 @@ SECRET_KEY = 'django-insecure-srk=o2$)2#z6tjkosgwbn9-g(f9g^v@qwu2n2tva0z5mnh9r73
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['0.0.0.0', 'localhost',  "10e9-51-210-71-107.ngrok-free.app"]
+ALLOWED_HOSTS = ['0.0.0.0', 'localhost']
 
 
 # Application definition
@@ -54,6 +54,8 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    # corsheaders middleware
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -61,8 +63,6 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     # debug toolbar middleware
     'debug_toolbar.middleware.DebugToolbarMiddleware',
-    # corsheaders middleware
-    'corsheaders.middleware.CorsMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -257,7 +257,6 @@ EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 # django corse config
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
-    "https://10e9-51-210-71-107.ngrok-free.app",
 ]
 
 CORS_ALLOW_HEADERS = [

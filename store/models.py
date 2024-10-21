@@ -2,9 +2,11 @@ from typing import Iterable
 from django.db import models
 from django.utils.text import slugify
 from django.db import models
+from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.conf import settings
 from uuid import uuid4
+
 
 class Category(models.Model):
     title = models.CharField(max_length=255)
@@ -159,7 +161,19 @@ class Comment(models.Model):
 
 class Cart(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid4)
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, blank=True, null=True)
+    session_key = models.CharField(max_length=32, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        if self.user:
+            return f'{self.id} | {self.user}'
+        return f'{self.id} | {self.session_key}'
+    
+    def clean(self):
+        if self.session_key and self.user:
+            raise ValidationError('session_key and user field can not be filled at the same time')
+
 
 
 class CartItem(models.Model):

@@ -117,7 +117,7 @@ class CartViewSet(ModelViewSet):
         ).all().order_by('-created_at')
     lookup_field = 'id'
     pagination_class = StandardResultSetPagination
-    permission_classes = [IsAuthenticated]
+    # permission_classes = [IsAuthenticated]
     lookup_value_regex = '[0-9A-Za-z]{8}\-?[0-9A-Za-z]{4}\-?[0-9A-Za-z]{4}\-?[0-9A-Za-z]{4}\-?[0-9A-Za-z]{12}'
 
     def get_throttles(self):

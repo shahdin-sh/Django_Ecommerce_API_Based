@@ -183,16 +183,22 @@ class CartSerializer(serializers.ModelSerializer):
     id = serializers.UUIDField(read_only=True)
     items = CartItemSerializer(many=True, read_only=True)
     total_price = serializers.SerializerMethodField()
+    belongs_to = serializers.SerializerMethodField()
 
     class Meta:
         model = Cart
-        fields = ['id', 'items', 'total_price']
+        fields = ['id', 'belongs_to', 'items', 'total_price']
 
     TOMAN_SIGN = 'T'
 
     def get_total_price(self, obj:Cart):
         total_price = sum([item.quantity * int(item.product.unit_price) for item in obj.items.all()])
         return f'{total_price: ,} {self.TOMAN_SIGN}'
+    
+    def get_belongs_to(self, obj:Cart):
+        if obj.user:
+            return f'{obj.user}'
+        return f'anon user | {obj.session_key}'
     
 
 # Address Serializers
