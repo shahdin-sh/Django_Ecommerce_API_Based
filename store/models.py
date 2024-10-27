@@ -1,3 +1,4 @@
+import hashlib
 from typing import Iterable
 from django.db import models
 from django.utils.text import slugify
@@ -37,7 +38,7 @@ class Product(models.Model):
     slug = models.SlugField(unique=True)
     description = models.TextField()
     unit_price = models.PositiveIntegerField()
-    inventory = models.IntegerField(validators=[MinValueValidator(0)])
+    inventory = models.PositiveIntegerField(validators=[MinValueValidator(0)])
     datetime_created = models.DateTimeField(auto_now_add=True)
     datetime_modified = models.DateTimeField(auto_now=True)
     discounts = models.ManyToManyField(Discount, blank=True)
@@ -162,18 +163,20 @@ class Comment(models.Model):
 class Cart(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid4)
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, blank=True, null=True)
-    session_key = models.CharField(max_length=32, blank=True, null=True)
+    session_key = models.CharField(max_length=255, blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         if self.user:
-            return f'{self.id} | {self.user}'
-        return f'{self.id} | {self.session_key}'
+            return f'{self.id} | {self.user.username}'
+        return f'{self.id} | {self.session_key[:4]}...'
     
-    def clean(self):
-        if self.session_key and self.user:
-            raise ValidationError('session_key and user field can not be filled at the same time')
+    TOMAN_SIGN = 'T'
 
+    def total_price(self):
+        cart_total_price = sum((item.product.unit_price * item.quantity) for item in self.items.all())
+
+        return f'{cart_total_price: ,} {self.TOMAN_SIGN}'
 
 
 class CartItem(models.Model):
@@ -183,3 +186,10 @@ class CartItem(models.Model):
 
     class Meta:
         unique_together = [['cart', 'product']]
+    
+    TOMAN_SIGN = 'T'
+    
+    def total_price(self):
+        cartitem_total_price =  sum([self.product.unit_price * self.quantity])
+
+        return f'{cartitem_total_price: ,} {self.TOMAN_SIGN}'

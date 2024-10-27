@@ -1,5 +1,6 @@
 import requests, json
 from django_filters.rest_framework import DjangoFilterBackend
+from django.db import IntegrityError
 from django.db.models import Count, Prefetch
 from django.shortcuts import redirect, get_object_or_404
 
@@ -12,7 +13,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle, AnonRateThrottle, ScopedRateThrottle
 from rest_framework.views import APIView
-from rest_framework.viewsets import ModelViewSet
+from rest_framework.viewsets import ModelViewSet, ViewSet
 
 from .serializers import *
 from .filters import ProductFilter, OrderFilter, CustomerWithOutAddress
@@ -111,65 +112,126 @@ class CommentViewSet(ModelViewSet):
 
 # Cart View
 class CartViewSet(ModelViewSet):
-    http_method_names = ['get', 'put', 'delete', 'options', 'head']
-    serializer_class = CartSerializer
-    queryset = Cart.objects.prefetch_related(
-        Prefetch('items', queryset=CartItem.objects.select_related('product'))
-        ).all().order_by('-created_at')
+    http_method_names = ['get', 'delete', 'options', 'head']
     lookup_field = 'id'
+    serializer_class = CartSerializer
     pagination_class = StandardResultSetPagination
     lookup_value_regex = '[0-9A-Za-z]{8}\-?[0-9A-Za-z]{4}\-?[0-9A-Za-z]{4}\-?[0-9A-Za-z]{4}\-?[0-9A-Za-z]{12}'
 
+    def is_admin_or_manager(self):
+        user = self.request.user
+        if user.is_authenticated and (user.is_superuser or user.groups.filter(name='Order Manager').exists()):
+            return True
+        
+    def get_serializer_class(self):
+        return ManagerCartSerializer if self.is_admin_or_manager() else CartSerializer
+    
     def get_queryset(self):
         user = self.request.user
         queryset =  Cart.objects.prefetch_related(
                         Prefetch('items', queryset=CartItem.objects.select_related('product'))
-                        )
+                    )
 
+        if self.is_admin_or_manager():
+            return queryset.all().order_by('-created_at')
+        
         if user.is_authenticated:
-            if user.is_superuser or user.groups.filter(name='Order Manager').exists():
-                return queryset.all().order_by('-created_at')
-            else:
-                carts = queryset.filter(user=user)
+            carts = queryset.filter(user=user)
         else:
             carts = queryset.filter(session_key=self.request.session.session_key)
 
         if not carts.exists():
             raise NotFound()
+        return carts
     
     def paginate_queryset(self, queryset):
-        user = self.request.user
-        if user.is_authenticated and (user.is_superuser or user.groups.filter(name='Order Manager').exists()):
+        if self.is_admin_or_manager:
             return super().paginate_queryset(queryset)
 
     def get_permissions(self):
-        if self.request.method in ['PUT', 'DELETE']:
+        if self.request.method in ['DELETE']:
             return [IsOrderManager()]
         return [AllowAny()]
         
     def get_throttles(self):
         return base_throttle.get_throttles(self.request)
+    
+
+class AddToCartViewSet(ViewSet):
+    http_method_names = ['post']
+
+    @transaction.atomic
+    def create(self, request, product_slug:None):
+        user = request.user
+
+        if user.is_authenticated:
+            cart, created = Cart.objects.get_or_create(user=user)
+        else:
+            cart, created = Cart.objects.get_or_create(session_key=request.session.session_key)
+
+        context = {
+            'cart_id': cart.id,
+            'product_slug': self.kwargs['product_slug'],
+            'request': request,
+        }
+
+        item_creation_serializer = AddItemtoCartSerializer(data=request.data, context=context)
+        item_creation_serializer.is_valid(raise_exception=True)
+
+        try:
+            created_item = item_creation_serializer.save()
+        except IntegrityError:
+            return Response('This product has already added to your cart', status=status.HTTP_400_BAD_REQUEST)
+
+        cartitem_serializer = CartItemSerializer(created_item, context={'request': request})
+
+        return Response(cartitem_serializer.data, status=status.HTTP_201_CREATED)
 
 
 class CartItemViewSet(ModelViewSet):
     http_method_names = ['get', 'post', 'put', 'delete', 'options', 'head']
-    permission_classes = [IsAuthenticated]
+    lookup_field = 'pk'
+
+    def is_admin_or_manager(self):
+        user = self.request.user
+        if user.is_authenticated and (user.is_superuser or user.groups.filter(name='Order Manager').exists()):
+            return True
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
-            return AddItemtoCartSerializer
+            return ManagerAddItemtoCartSerializer 
         
-        return CartItemSerializer
+        return ManagerCartItemSerializer if self.is_admin_or_manager() else CartItemSerializer
+    
+    def get_serializer_context(self):
+        context = {
+            'cart_id': self.kwargs['cart_id'],
+            'request': self.request
+        }
+        return context
 
     def get_queryset(self):
+        request = self.request
         cart_id = self.kwargs['cart_id']
-        return CartItem.objects.select_related('cart', 'product').filter(cart__id=cart_id).order_by('-quantity')
+        queryset = CartItem.objects.select_related('cart', 'product').filter(
+            cart__id=cart_id
+            ).order_by('-quantity')
+        
+        if self.is_admin_or_manager():
+            return queryset
+        if request.user.is_authenticated:
+            cartitems = queryset.filter(cart__user=request.user)
+        else:
+            cartitems = queryset.filter(cart__session_key=request.session.session_key)
+        
+        if not cartitems.exists():
+            raise NotFound()
+        return cartitems
     
-
     def create(self, request, *args, **kwargs):
         # add item to cart with AddItemtoCartSerializer
         context = {'cart' : Cart.objects.get(id=self.kwargs['cart_id']), 'request' : request}
-        item_creation_serializers = AddItemtoCartSerializer(data=request.data, context=context)
+        item_creation_serializers = ManagerAddItemtoCartSerializer(data=request.data, context=context)
         item_creation_serializers.is_valid(raise_exception=True)
 
         # Get request and observing the items is with CartItemSerializer
@@ -177,9 +239,26 @@ class CartItemViewSet(ModelViewSet):
         get_request_serializer = CartItemSerializer(created_item, context={'request': request})
         return Response(get_request_serializer.data, status=status.HTTP_201_CREATED)
     
-    # def destroy(self, request, *args, **kwargs):
-    #     # showing the proper data when the instance get deleted
-    #     pass
+    def paginate_queryset(self, queryset):
+        if self.is_admin_or_manager:
+            return super().paginate_queryset(queryset)
+
+    def get_permissions(self):
+        if self.request.method in ['POST']:
+            return [IsOrderManager()]
+        return [AllowAny()]
+    
+    @transaction.atomic
+    def destroy(self, request, pk, cart_id):
+        cartitem = get_object_or_404(CartItem.objects.select_related('cart'), pk=pk)
+        cart = cartitem.cart
+
+        cartitem.delete()
+
+        if cart.items.count() == 0:
+            cart.delete()
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
     
     def get_throttles(self):
         return base_throttle.get_throttles(self.request)

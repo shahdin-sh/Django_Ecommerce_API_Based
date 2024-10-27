@@ -27,6 +27,8 @@ from .schema import schema_view
 
 import debug_toolbar
 
+SITE_URL_HOST = 'http://0.0.0.0:8000'
+
 urlpatterns = [
     path('auth/', include('djoser.urls')),
     path('auth/', include('djoser.urls.jwt')),

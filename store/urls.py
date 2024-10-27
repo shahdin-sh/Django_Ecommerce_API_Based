@@ -15,6 +15,7 @@ router.register('orders', views.OrderViewSet, basename='order') # order-list | o
 
 product_router = routers.NestedDefaultRouter(router, 'products', lookup='product') # products/product_slug
 product_router.register('comments', views.CommentViewSet, basename='product-comments') # products/product_slug/comments/pk
+product_router.register('add-to-cart', views.AddToCartViewSet, basename='product-add-to-cart') # products/product_slug/add
 
 cart_router = routers.NestedDefaultRouter(router, 'carts', lookup='cart') # carts/uuid 
 cart_router.register('items', views.CartItemViewSet, basename='cart-items') # carts/uuid/items/item_pk

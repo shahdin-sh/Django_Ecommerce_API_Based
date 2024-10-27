@@ -164,15 +164,19 @@ class OrderItemAdmin(admin.ModelAdmin):
 
 class CartItemInline(admin.TabularInline):
     model = models.CartItem
-    readonly_fields = ['id', 'product', 'quantity']
+    list_display = ['id', 'product', 'quantity']
     extra = 0
     min_num = 1
 
+    def get_queryset(self, request):
+        pass
 
+    
 @admin.register(models.Cart)
 class CartAdmin(admin.ModelAdmin):
     # cart obj just can be created by authenticated and anon users who send Post Requests.
     list_display = ['id', 'user', 'session_key', 'created_at']
-    readonly_fields = ['id', 'created_at']
+    readonly_fields = ['id', 'created_at', 'user', 'session_key']
+    ordering = ['-created_at']
     inlines = [CartItemInline]
 

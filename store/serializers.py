@@ -2,12 +2,18 @@ from rest_framework import serializers
 from rest_framework.reverse import reverse
 
 from django.db import transaction 
-from django.db.models import Count
+from django.db.models import Prefetch
+from django.urls import reverse
 from django.utils.text import slugify
 
+from config.urls import SITE_URL_HOST
+
+
 from .models import Product, Category, Comment, Cart, CartItem, Customer, Address, Order, OrderItem
+from .validations import quantity_validation
 
 
+# Category Serializers
 class CategoryProductsSerializer(serializers.ModelSerializer):
     unit_price = serializers.SerializerMethodField()
 
@@ -62,7 +68,6 @@ class CommentSerializer(serializers.ModelSerializer):
         return self.instance
 
 
-# create ProductAddSerializer and ProductSerializer
 class ProductSerializer(serializers.ModelSerializer):
     detail = serializers.HyperlinkedIdentityField(view_name='product-detail', lookup_field = 'slug')
     category = serializers.HyperlinkedRelatedField(queryset=Category.objects.all(), view_name = 'category-detail', lookup_field = 'slug')
@@ -90,10 +95,10 @@ class ProductSerializer(serializers.ModelSerializer):
 
         return instance
  
+ 
 
 # Cart Serializers
 class CartProductSerializer(serializers.ModelSerializer):
-
     detail = serializers.HyperlinkedIdentityField(view_name='product-detail', lookup_field = 'slug')
     unit_price = serializers.SerializerMethodField()
 
@@ -105,11 +110,10 @@ class CartProductSerializer(serializers.ModelSerializer):
 
     def get_unit_price(self, obj:Product):
         return f'{obj.clean_price} {self.TOMAN_SIGN}'
-    
-    
-# handle cart items creation (POST request)
-class AddItemtoCartSerializer(serializers.ModelSerializer):
 
+
+# Manager Cart & CartItem Serializer
+class ManagerAddItemtoCartSerializer(serializers.ModelSerializer):
     product = serializers.PrimaryKeyRelatedField(queryset=Product.active.all())
 
     class Meta:
@@ -118,88 +122,127 @@ class AddItemtoCartSerializer(serializers.ModelSerializer):
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        cart = self.context.get('cart')
 
-        try:
-            for item in cart.items.all():
-                self.fields['product'].queryset = Product.active.exclude(id=item.product.id)
+        cart_id = self.context['cart_id']
+        cart_obj = Cart.objects.prefetch_related(
+                        Prefetch('items', queryset=CartItem.objects.select_related('product'))
+                    ).get(id=cart_id)
+        
+        cart_product_ids = list(cart_obj.items.values_list('product_id', flat=True))
 
-        except AttributeError:
-            return None
+        # exclude the products that is already in cart to prevent integirtiy error
+        self.fields['product'].queryset = Product.objects.select_related('category').exclude(id__in=cart_product_ids)
 
+    def validate(self, data):
+        quantity_validation(data.get('product'), data.get('quantity'))
+        return data
+    
     def create(self, validated_data):
         cart_id = self.context['cart'].id
-        product = validated_data['product']
-        quantity = validated_data['quantity']
 
-        #  Perform custom validation checks 
-        if quantity < 1:
-            raise serializers.ValidationError('quantity must be greater or equal to 1')
-        if  quantity > product.inventory:
-            raise serializers.ValidationError(f'quantity must be less than {product.name} inventory | < {product.inventory }')
-        else:
-            self.instance = CartItem.objects.create(cart_id=cart_id, **validated_data)
-            return self.instance
-        
+        cartitem = CartItem.objects.create(cart_id=cart_id, **validated_data)
+        self.instance = cartitem
+        return cartitem
 
-# handle cart items update and view (GET and PUT request)
-class CartItemSerializer(serializers.ModelSerializer):
 
-    current_product_stock = serializers.SerializerMethodField()
-    total_price = serializers.SerializerMethodField()
+class ManagerCartItemSerializer(serializers.ModelSerializer):
+    current_product_stuck = serializers.SerializerMethodField()
     product = CartProductSerializer(read_only=True)
 
     class Meta:
         model = CartItem
-        fields = ['id', 'product', 'quantity', 'current_product_stock', 'total_price']
+        fields = ['id', 'product', 'quantity', 'current_product_stuck', 'total_price']
 
-    TOMAN_SIGN = 'T'
-
-    def get_current_product_stock(self, obj:CartItem):
+    def get_current_product_stuck(self, obj:CartItem):
         invenory = obj.product.inventory
         quantity = obj.quantity
         
         if invenory > quantity:
             return obj.product.inventory - obj.quantity 
-        return 'Out of Stock'
+        return 'Out of Stuck'
 
     def get_total_price(self, obj:CartItem):
-        total_price = (obj.quantity * obj.product.unit_price)
-        return f'{total_price: ,} {self.TOMAN_SIGN}'
+        return obj.total_price()
 
     def update(self, instance, validated_data):
-        #  Perform custom validation checks 
-        if validated_data['quantity'] < 1:
-            raise serializers.ValidationError('quantity must be greater or equal to 1')
-        elif  validated_data['quantity'] > instance.product.inventory:
-            raise serializers.ValidationError(f'quantity must be less than {instance.product} inventory')
-        else:
-            super().update(instance, validated_data)
-            instance.save()
-            return instance
 
+        quantity_validation(instance.product, validated_data['quantity'])
 
-class CartSerializer(serializers.ModelSerializer):
+        super().update(instance, validated_data)
+        instance.save()
+        return instance
+    
+
+class ManagerCartSerializer(serializers.ModelSerializer):
+    detail = serializers.HyperlinkedIdentityField(view_name='cart-detail', lookup_field='id', read_only=True)
     id = serializers.UUIDField(read_only=True)
-    items = CartItemSerializer(many=True, read_only=True)
-    total_price = serializers.SerializerMethodField()
+    items = ManagerCartItemSerializer(many=True, read_only=True)
     belongs_to = serializers.SerializerMethodField()
 
     class Meta:
         model = Cart
-        fields = ['id', 'belongs_to', 'items', 'total_price']
-
-    TOMAN_SIGN = 'T'
+        fields = ['id', 'belongs_to', 'detail', 'items', 'total_price']
 
     def get_total_price(self, obj:Cart):
-        total_price = sum([item.quantity * int(item.product.unit_price) for item in obj.items.all()])
-        return f'{total_price: ,} {self.TOMAN_SIGN}'
+        return obj.total_price()
     
     def get_belongs_to(self, obj:Cart):
         if obj.user:
-            return f'{obj.user}'
+            return (SITE_URL_HOST + reverse('customuser-detail', kwargs={'id': obj.user.id}))
         return f'anon user | {obj.session_key}'
     
+    
+# User Cart & CartItem Serializer
+class AddItemtoCartSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CartItem
+        fields = ['quantity']
+
+    def create(self, validated_data):
+        product = Product.objects.get(slug=self.context['product_slug'])
+        cart_id = self.context['cart_id']
+        quantity = validated_data['quantity']
+
+        quantity = quantity_validation(product, quantity)
+
+        cartitem = CartItem.objects.create(cart_id=cart_id, product=product, quantity=quantity)
+        self.instance = cartitem
+        return cartitem
+    
+
+class CartItemSerializer(serializers.ModelSerializer):
+    # detail = serializers.HyperlinkedRelatedField(view_name='cart-items-detail', lookup_field='pk', read_only=True)
+    product_name = serializers.CharField(source='product.name', read_only=True)
+    current_product_stuck = serializers.IntegerField(source='product.inventory', read_only=True)
+
+    class Meta:
+        model = CartItem
+        fields = ['id', 'product_name', 'quantity', 'current_product_stuck', 'total_price']
+
+    def get_total_price(self, obj):
+        return obj.total_price()
+
+    def update(self, instance, validated_data):
+        #  Perform custom validation checks 
+        quantity_validation(instance.product, validated_data['quantity'])
+        
+        super().update(instance, validated_data)
+        instance.save()
+        return instance
+    
+
+class CartSerializer(serializers.ModelSerializer):
+    detail = serializers.HyperlinkedIdentityField(view_name='cart-detail', lookup_field='id', read_only=True)
+    items = CartItemSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Cart
+        fields = ['id', 'detail', 'items', 'total_price']
+    
+    def get_total_price(self, obj:Cart):
+        return obj.total_price()
+    
+
 
 # Address Serializers
 class AddressSerializer(serializers.ModelSerializer):
@@ -258,6 +301,7 @@ class ManagersAddAddressSerializer(serializers.ModelSerializer):
         self.fields['customer'].queryset = Customer.objects.filter(address__isnull=True).distinct()
 
 
+
 # Customer Serializers
 class CustomerAddressSerializer(serializers.ModelSerializer):
     class Meta:
@@ -278,7 +322,7 @@ class ManagerCustomerSerializer(serializers.ModelSerializer):
         return obj.user.username
     
     def get_address_creation_endpoint(self, obj:Customer):
-        search_url = 'http://127.0.0.1:8000' + reverse('address-list') + f'?search={obj.user.username}'
+        search_url = (SITE_URL_HOST + reverse('address-list') + f'?search={obj.user.username}')
         address = Address.objects.filter(customer=obj)
         
         if address.exists():
@@ -304,7 +348,7 @@ class CustomerSerializer(serializers.ModelSerializer):
         fields = ['birth_date', 'address', 'address_info']
     
     def get_address_info(self, obj:Customer):
-        url = 'http://0.0.0.0:8000' + reverse('address-list')
+        url = (SITE_URL_HOST + reverse('address-list'))
         address = Address.objects.filter(customer=obj)
 
         if address.exists():
@@ -320,6 +364,7 @@ class CustomerOrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = Customer
         fields = ['id', 'username', 'address']
+
 
 
 # Order Serializers
@@ -425,6 +470,8 @@ class OrderCreationSerializer(serializers.Serializer):
             return order_obj
 
 
+
+# Payment Serializer
 class PaymentSerializer(serializers.Serializer):
     order_id = serializers.IntegerField()
 

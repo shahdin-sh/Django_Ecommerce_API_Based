@@ -63,6 +63,8 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     # debug toolbar middleware
     'debug_toolbar.middleware.DebugToolbarMiddleware',
+    # custom middlewares
+    'accounts.thread_local.RequestMiddleware'
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -166,7 +168,6 @@ AUTH_USER_MODEL = 'accounts.CustomUser'
 
 # Rest Framework settings
 REST_FRAMEWORK = {
-    # 'DEFAULT_CACHE_RESPONSE_TIMEOUT': 60 * 15,
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
@@ -218,8 +219,8 @@ REST_FRAMEWORK = {
 # Authentication packages configuration
 SIMPLE_JWT = {
     'AUTH_HEADER_TYPES': ('JWT',),
-    'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=2),
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=10),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=10),
 }
 
 DJOSER = {
@@ -246,13 +247,6 @@ DEBUG_TOOLBAR_CONFIG = {
 
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
-# # cache settings
-# CACHES = {
-#     'default': {
-#         'BACKEND': 'django_bmemcached.memcached.BMemcached',
-#         'LOCATION': '127.0.0.1:11211',
-#     }
-# }
 
 # django corse config
 CORS_ALLOWED_ORIGINS = [
@@ -270,3 +264,12 @@ CORS_ALLOW_ALL_ORIGINS = True  # OR CORS_ALLOWED_ORIGINS = ['https://your-fronte
 # Media Configuration
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+
+# cach config 
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'unique-snowflake',
+    }
+}
+
