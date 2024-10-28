@@ -147,12 +147,7 @@ class CartViewSet(ModelViewSet):
     def paginate_queryset(self, queryset):
         if self.is_admin_or_manager:
             return super().paginate_queryset(queryset)
-
-    def get_permissions(self):
-        if self.request.method in ['DELETE']:
-            return [IsOrderManager()]
-        return [AllowAny()]
-        
+    
     def get_throttles(self):
         return base_throttle.get_throttles(self.request)
     

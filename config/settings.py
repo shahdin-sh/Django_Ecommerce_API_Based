@@ -64,7 +64,8 @@ MIDDLEWARE = [
     # debug toolbar middleware
     'debug_toolbar.middleware.DebugToolbarMiddleware',
     # custom middlewares
-    'accounts.thread_local.RequestMiddleware'
+    'accounts.thread_local.RequestMiddleware',
+    'accounts.middleware.CartTransitionMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
