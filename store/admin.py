@@ -180,3 +180,13 @@ class CartAdmin(admin.ModelAdmin):
     ordering = ['-created_at']
     inlines = [CartItemInline]
 
+
+@admin.register(models.Wishlist)
+class WishlistAdmin(admin.ModelAdmin):
+    list_display = ['user']
+    readonly_fields = ['user', 'products']
+    ordering = ['user__id']
+
+    # def has_add_permission(self, request):
+    #     # Disable the add button in the admin interface
+    #     return False

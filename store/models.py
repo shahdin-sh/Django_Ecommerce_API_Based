@@ -193,3 +193,11 @@ class CartItem(models.Model):
         cartitem_total_price =  sum([self.product.unit_price * self.quantity])
 
         return f'{cartitem_total_price: ,} {self.TOMAN_SIGN}'
+
+
+class Wishlist(models.Model):
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='wishlist')
+    products = models.ManyToManyField('Product', blank=True, null=True)
+
+    def __str__(self):
+        return f'{self.user} wishlist'
