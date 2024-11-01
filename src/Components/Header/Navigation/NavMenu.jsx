@@ -1,5 +1,6 @@
 import { useRef } from "react";
 import classes from "./styles.module.css";
+import { Link } from "react-router-dom";
 
 const NavMenu = ({ isOpen, setIsOpen, setIsScrollingDisabled }) => {
   const ref = useRef();
@@ -18,7 +19,11 @@ const NavMenu = ({ isOpen, setIsOpen, setIsScrollingDisabled }) => {
   return (
     <>
       {/* menu items */}
-      <div ref={ref} className={`w-[400px] h-[100vh] z-[10] fixed left-0 top-0 bg-white opacity-[1] ${classes.menuOpen}`}></div>
+      <div ref={ref} className={`w-[400px] h-[100vh] z-[10] fixed left-0 top-0 bg-white opacity-[1] p-[40px] ${classes.menuOpen}`}>
+        <Link onClick={clickHandler} to="/products" className="w-fit h-fit text-[14px] font-[main] font-bold py-[10px]">
+          فروشگاه
+        </Link>
+      </div>
 
       {/* menu background */}
       <div ref={refBg} onClick={clickHandler} className={`w-full h-[100vh] z-[9] fixed left-0 top-0 bg-[rgba(0,0,0,0.5)] ${classes.bgFadeIn}`}></div>

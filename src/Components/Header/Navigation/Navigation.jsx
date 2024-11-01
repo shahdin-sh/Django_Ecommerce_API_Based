@@ -3,6 +3,8 @@ import { VscAccount } from "react-icons/vsc";
 import { Link } from "react-router-dom";
 import NavMenu from "./NavMenu";
 import { useEffect, useState } from "react";
+import { IoCartOutline } from "react-icons/io5";
+
 
 const Navigation = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -39,6 +41,11 @@ const Navigation = () => {
         {/* account link */}
         <Link to="/" className="w-[24px] h-[24px] flex justify-center items-center">
           <VscAccount className="w-full h-full" />
+        </Link>
+
+        {/* cart link */}
+        <Link to="./cart" className="w-[24px] h-[24px] flex justify-center items-center">
+        <IoCartOutline className="w-full h-full"/>
         </Link>
 
         {/* open menu button */}

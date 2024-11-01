@@ -3,9 +3,9 @@ import axios from "axios";
 
 export const fetchProducts = createAsyncThunk("fetch/products/", async () => {
   const res = await axios.get("http://0.0.0.0:8000/store/products/", {
-    headers: {
-      "ngrok-skip-browser-warning": true,
-    },
+    // headers: {
+    //   "ngrok-skip-browser-warning": true,
+    // },
   });
   return res.data.results;
 });
@@ -17,22 +17,22 @@ export const ProductsStateManagement = createSlice({
     loading: null,
     error: null,
   },
-  extraReducers: (Builder) => [
+  extraReducers: (Builder) => {
     Builder.addCase(fetchProducts.fulfilled, (state, action) => {
       state.productsData = action.payload;
       state.loading = false;
       state.error = null;
     })
       .addCase(fetchProducts.pending, (state) => {
-        // state.productsData = null;
+        state.productsData = null;
         state.loading = true;
         state.error = null;
       })
       .addCase(fetchProducts.rejected, (state, action) => {
-        // state.productsData = null;
+        state.productsData = null;
         state.loading = true;
         state.error = action.error.message;
-      }),
-  ],
+      });
+  },
 });
 export default ProductsStateManagement.reducer;

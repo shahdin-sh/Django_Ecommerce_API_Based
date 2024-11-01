@@ -16,7 +16,7 @@ import { Link } from "react-router-dom";
 const Brands = () => {
   return (
     <>
-      <Swiper slidesPerView={5} spaceBetween={30} loop={true} navigation={true} modules={[Navigation]} className="Brands wrapper !mb-[120px]">
+      <Swiper slidesPerView={5} spaceBetween={30} loop={true} navigation={true} modules={[Navigation]} className="Brands wrapper !mb-[480px] !py-[120px]">
         <SwiperSlide>
           <Link to="/">
             <img src={brand} alt="" />

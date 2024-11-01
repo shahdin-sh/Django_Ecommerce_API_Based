@@ -34,7 +34,10 @@ const Header = () => {
 
   return (
     <>
-      <header ref={ref} className="w-full h-[90px] flexRow justify-center items-center bg-[rgb(241,241,241)] z-50 duration-300">
+      <header
+        ref={ref}
+        className="w-full h-[90px] flexRow justify-center items-center bg-[rgb(241,241,241)] z-50 duration-300"
+      >
         <div className="wrapper w-full h-full flexRow justify-between items-center">
           {/* search bar */}
           <SearchBar />

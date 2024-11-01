@@ -45,8 +45,3 @@ input[type="search"]::-ms-clear {
   width: 0;
   height: 0;
 }
-
-div#root {
-  margin-bottom: 580px;
-}
-

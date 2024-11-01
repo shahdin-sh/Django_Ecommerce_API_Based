@@ -1,7 +1,7 @@
 const BestSellerProducts = () => {
   return (
     <>
-      <div className="w-full wrapper flexCol justify-center items-start !mb-[100px]">
+      <div className="w-full wrapper flexCol justify-center items-start">
         <p className="text-[30px] font-[main] text-[rgb(17,17,17)] mb-[60px]">محصولات پرفروش</p>
         <div className="w-full grid grid-flow-row grid-cols-4 grid-rows-2 gap-[24px]">
           <div className="h-[340px] bg-[rgb(241,241,241)] flex justify-center items-center">Item-1</div>
