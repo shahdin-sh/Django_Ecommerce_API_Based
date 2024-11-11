@@ -9,5 +9,7 @@ __pycache__/
 /media
 /text.txt
 .vscode/
-DS_*
+.DS_Store
 info.txt
+database_dump copy.sql
+.env

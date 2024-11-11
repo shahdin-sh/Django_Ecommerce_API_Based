@@ -197,7 +197,7 @@ class CartItem(models.Model):
 
 class Wishlist(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='wishlist')
-    products = models.ManyToManyField('Product', blank=True, null=True)
+    products = models.ManyToManyField('Product')
 
     def __str__(self):
         return f'{self.user} wishlist'
