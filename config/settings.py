@@ -270,11 +270,13 @@ CORS_ALLOW_ALL_ORIGINS = True  # OR CORS_ALLOWED_ORIGINS = ['https://your-fronte
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
-# cach config 
+# Redis config
 CACHES = {
-    'default': {
-        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-        'LOCATION': 'unique-snowflake',
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": "redis://redis:6379/1",  # 'redis' is the Docker service name
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        }      
     }
 }
-

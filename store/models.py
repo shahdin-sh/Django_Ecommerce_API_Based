@@ -1,7 +1,6 @@
 import hashlib
 from typing import Iterable
 from django.db import models
-from django.utils.text import slugify
 from django.db import models
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
@@ -54,7 +53,7 @@ class Product(models.Model):
     @property
     def clean_price(self):
         return f'{self.unit_price: ,}'
-
+    
 
 class Customer(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)

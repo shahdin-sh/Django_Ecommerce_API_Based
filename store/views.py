@@ -1,8 +1,11 @@
 import requests, json
 from django_filters.rest_framework import DjangoFilterBackend
+from django.core.cache import cache
 from django.db import IntegrityError
 from django.db.models import Count, Prefetch
-from django.shortcuts import redirect, get_object_or_404
+from django.shortcuts import get_object_or_404
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import cache_page
 
 from rest_framework import status
 from rest_framework.decorators import action
@@ -41,6 +44,39 @@ class ProductViewSet(ModelViewSet):
     pagination_class = LargeResultSetPagination
     permission_classes = [IsProductManager]
 
+    CACHE_KEY_PREFIX = "product_list"
+
+    @method_decorator(cache_page(60 * 15, key_prefix=CACHE_KEY_PREFIX))
+    def list(self, request, *args, **kwargs):
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        page = self.paginate_queryset(queryset)
+
+        if page:
+            serializer = self.get_serializer(page, many=True)
+            paginated_response = self.get_paginated_response(serializer.data)
+
+            return paginated_response
+    
+    def retrieve(self, request, *args, **kwargs):
+        # custom caching to get the product slug dynamically
+        product_slug = kwargs.get('slug')
+        product_cache = cache.get(product_slug)
+
+        if product_cache:
+            return Response(product_cache)
+        
+        try:
+            product = self.get_queryset().get(slug=product_slug)
+            serializer = ProductSerializer(product, context={'request': request})
+
+            # cache serialized product before returning the response 
+            cache.set(product_slug, serializer.data, 60 * 15)
+
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Product.DoesNotExist:
+            raise NotFound()
+
     def destroy(self, request, slug):
         product = get_object_or_404(Product.objects.select_related('category').all(), slug=slug)
         if product.order_items.count() > 0:
@@ -54,7 +90,11 @@ class ProductViewSet(ModelViewSet):
     
     def get_throttles(self):
         self.throttle_scope = 'product'
-        return base_throttle.get_throttles(request=self.request, throttle_scope=self.throttle_scope, group_name='Product Manager')
+        return base_throttle.get_throttles(
+            request=self.request, 
+            throttle_scope=self.throttle_scope, 
+            group_name='Product Manager'
+        )
     
 
 # Category View
