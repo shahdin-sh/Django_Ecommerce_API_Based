@@ -13,6 +13,7 @@ services:
     depends_on:
       - db
       - redis
+      - celery
     environment:
       - REDIS_HOST=redis 
       - DATABASE_HOST=db
@@ -26,3 +27,31 @@ services:
     image: redis:latest
     ports:
       - "6379:6379"
+  
+  celery:
+    build: .
+    command: ["celery", "-A", "config", "worker", "--loglevel=info"]
+    volumes:
+      - .:/code
+    depends_on:
+      - redis
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/1
+  
+  celery-beat:
+    build: .
+      # Starts Celery Beat with Django integration for persistent periodic task scheduling
+      # -A myproject: Specifies the Django project
+      # --scheduler: tells Celery to use the DatabaseScheduler instead of the default in-memory scheduler.
+    command: ["celery", "-A", "config", "beat", "--loglevel=info", "--scheduler", "django_celery_beat.schedulers:DatabaseScheduler"]
+    volumes:
+      - .:/code
+    depends_on:
+      - redis
+      - celery
+
+
+volumes:
+  postgres_data:
+  redis_data:

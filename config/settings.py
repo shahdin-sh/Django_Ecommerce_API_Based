@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     'phonenumber_field',
     'drf_yasg',
     'corsheaders',
+    'django_celery_beat',
 ]
 
 MIDDLEWARE = [
@@ -280,3 +281,13 @@ CACHES = {
         }      
     }
 }
+
+# Celery config
+CELERY_BROKER_URL = 'redis://redis:6379/1'
+CELERY_RESULT_BACKEND = 'redis://redis:6379/1'
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERYD_LOG_COLOR = True
+CELERYD_LOG_LEVEL = 'INFO'
+# For django-celery-beat
+CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
