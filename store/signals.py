@@ -9,7 +9,9 @@ from django.utils.text import slugify
 from config.utils import delete_decorative_cache
 
 from .models import Customer, OrderItem, Order, Product
+from .tasks import update_inventory
 
+from celery import group
 
 
 @receiver(post_save, sender=settings.AUTH_USER_MODEL)

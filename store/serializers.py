@@ -443,11 +443,7 @@ class OrderCreationSerializer(serializers.Serializer):
 
     def validate_cart_uuid(self, cart_uuid):
         try: 
-            cart_obj = Cart.objects.prefetch_related('items').get(id=cart_uuid)
-
-            # check if any items exists in the cart or not
-            if cart_obj.items.count() == 0:
-                raise serializers.ValidationError('You must at least have one item in your cart.')
+            Cart.objects.prefetch_related('items').get(id=cart_uuid)
             return cart_uuid
         except Cart.DoesNotExist:
             raise serializers.ValidationError('cart object not found')
@@ -462,30 +458,21 @@ class OrderCreationSerializer(serializers.Serializer):
             order_obj = Order.objects.create(customer=customer)
 
             # create orderitems based on the items in cart that user fill its uuid
-            # first way
-            for item in cart_obj.items.all():
-                OrderItem.objects.create(
+                
+            order_items = [
+                OrderItem(
                     order = order_obj,
                     product = item.product,
                     quantity = item.quantity,
                     unit_price = item.product.unit_price
-                )
-                
-            # order_items = [
-            #     OrderItem(
-            #         order = order_obj,
-            #         product = item.product,
-            #         quantity = item.quantity,
-            #         unit_price = item.product.unit_price
-            #     ) for item in cart_obj.items.all()
-            # ]
+                ) for item in cart_obj.items.all()
+            ]
 
-            # OrderItem.objects.bulk_create(order_items)
+            OrderItem.objects.bulk_create(order_items)
 
-            # cart_obj.delete()
+            cart_obj.delete()
 
             return order_obj
-
 
 
 # Payment Serializer

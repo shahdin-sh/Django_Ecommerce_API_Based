@@ -24,7 +24,9 @@ from .models import Product, Category, Comment, Cart, CartItem, Customer, Addres
 from .paginations import StandardResultSetPagination, LargeResultSetPagination
 from .permissions import IsAdminOrReadOnly, IsProductManager, IsContentManager, IsCustomerManager, IsAdmin, IsOrderManager 
 from .throttle import AdminUserThrottle, BaseThrottleView
+from .tasks import approve_order_status_after_successful_payment, update_inventory
 
+from celery import group
 
 # Determines the appropriate throttle class based on throttle_scopes and four types of user 
 # inlucding: superusers, managers, anonymous users and authenticated users.
@@ -532,9 +534,16 @@ class OrderViewSet(ModelViewSet):
 
         return Response(serializer.data , status=status.HTTP_201_CREATED)
     
-    # def destroy(self, request, *args, **kwargs):
-    #     # showing the proper data when the instance get deleted
-    #     pass
+    def destroy(self, request, *args, **kwargs):
+        order = self.get_object()
+
+        # Trigger the Celery task to increase products inventory asynchronously
+        task_list = group(
+            update_inventory.s(orderitem.product.id, orderitem.quantity, False) for orderitem in order.items.all()
+        )
+        task_list.apply_async()
+
+        return super().destroy(request, *args, **kwargs)
 
     def get_permissions(self):
         if self.request.method in ['DELETE', 'PATCH', 'PUT']:
@@ -564,6 +573,9 @@ class PaymentProcess(APIView):
             }
 
             payment_data = request.session['payment_data']
+            # get order from session
+            order_id = payment_data['order_id']
+            order = Order.objects.select_related('customer').prefetch_related('items').get(id=order_id)
 
             data_body = {
                 'merchant_id': payment_data['merchant_id'],
@@ -580,11 +592,14 @@ class PaymentProcess(APIView):
                 return Response({"error": "Invalid JSON response from the payment gateway."}, status=status.HTTP_400_BAD_REQUEST)
             
             if data['data']['code'] == 100:
+                # Trigger the Celery task to approve order status asynchronously
+                approve_order_status_after_successful_payment.delay(order_id)
 
-                # set the order status to paid and save it in DB
-                order_obj = Order.objects.select_related('customer').prefetch_related('items').get(id=payment_data['order_id'])
-                order_obj.status = 'paid'
-                order_obj.save()
+                # Trigger the Celery task to reduce products inventory asynchronously
+                task_list = group(
+                    update_inventory.s(orderitem.product.id, orderitem.quantity, True) for orderitem in order.items.all()
+                )
+                task_list.apply_async()
 
                 return Response(f"Transaction success. | ref_id: {data['data']['ref_id']}.", status=status.HTTP_200_OK)
             
@@ -605,6 +620,13 @@ class PaymentProcess(APIView):
         
         order_id = request.data['order_id']
         order_obj = Order.objects.select_related('customer').prefetch_related('items').get(id=order_id)
+
+        # check the inventory to make sure the product stock is avaliable if not guide the user to update his order
+        has_sufficient_stock, insufficient_products =  order_obj.check_stock()
+
+        if not has_sufficient_stock:
+            order_obj.delete()
+            return Response(f'Your order items has not enough stock please submit your order again. | detail: {insufficient_products}', status=status.HTTP_400_BAD_REQUEST)
         
         # payment data request to zarinpal
         zarinpal_request_url = 'https://sandbox.zarinpal.com/pg/v4/payment/request.json'
@@ -628,9 +650,7 @@ class PaymentProcess(APIView):
         except json.JSONDecodeError as e:
             return Response({"error": "Invalid JSON response from the payment gateway."}, status=status.HTTP_400_BAD_REQUEST)
         
-        authority = data['data']['authority']
-
-        if data['data']['code'] == 100 and data['data']['message'] == 'Success' and data['errors'] == []:
+        if data['data'] and  data['data']['code'] == 100 and data['data']['message'] == 'Success' and not data['errors']:
             # delete the session about previous transaction
             if request.session.get('payment_data'):
                 del request.session['payment_data']
@@ -639,8 +659,10 @@ class PaymentProcess(APIView):
             request.session['payment_data'] = {
                 'merchant_id' : data_body['merchant_id'],
                 'amount': data_body['amount'],
-                'order_id': order_id
+                'order_id': order_id,
             }
+
+            authority = data['data']['authority']
 
             payment_url = 'https://sandbox.zarinpal.com/pg/StartPay/{authority}'.format(authority=authority)
             return Response(f'paymant_url: {payment_url}', status=status.HTTP_200_OK)

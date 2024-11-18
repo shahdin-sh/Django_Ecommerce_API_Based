@@ -90,11 +90,9 @@ class UnpaidOrderManger(models.Manager):
 class Order(models.Model):
     ORDER_STATUS_PAID = 'paid'
     ORDER_STATUS_UNPAID = 'unpaid'
-    ORDER_STATUS_CANCELED = 'canceled'
     ORDER_STATUS = [
         (ORDER_STATUS_PAID,'Paid'),
         (ORDER_STATUS_UNPAID,'Unpaid'),
-        (ORDER_STATUS_CANCELED,'Canceled'),
     ]
     
     customer = models.ForeignKey(Customer, on_delete=models.PROTECT, related_name='orders')
@@ -110,7 +108,19 @@ class Order(models.Model):
     @property
     def total_items_price(self):
         return sum([item.unit_price * item.quantity for item in self.items.all()])
-
+    
+    def check_stock(self):
+        insufficient_products = []
+        for item in self.items.select_related('product'):
+            if item.quantity > item.product.inventory:
+                insufficient_products.append({
+                    'product': item.product.name,
+                    'product_current_stock': item.product.inventory,
+                    'amount': item.quantity
+                })
+        
+        return (len(insufficient_products) == 0 ,insufficient_products)
+    
 
 class OrderItem(models.Model):
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='items')
