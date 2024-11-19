@@ -24,9 +24,15 @@ from .models import Product, Category, Comment, Cart, CartItem, Customer, Addres
 from .paginations import StandardResultSetPagination, LargeResultSetPagination
 from .permissions import IsAdminOrReadOnly, IsProductManager, IsContentManager, IsCustomerManager, IsAdmin, IsOrderManager 
 from .throttle import AdminUserThrottle, BaseThrottleView
-from .tasks import approve_order_status_after_successful_payment, update_inventory
+from .tasks import (
+    approve_order_status_after_successful_payment,
+    update_inventory, 
+    change_anon_cart_to_auth_cart,
+    transit_anon_cart_items_to_auth_cart_and_delete 
+)
 
 from celery import group
+
 
 # Determines the appropriate throttle class based on throttle_scopes and four types of user 
 # inlucding: superusers, managers, anonymous users and authenticated users.
@@ -265,6 +271,7 @@ class CartViewSet(ModelViewSet):
     
     def get_queryset(self):
         user = self.request.user
+        session_key = self.request.session.session_key
         queryset =  Cart.objects.prefetch_related(
                         Prefetch('items', queryset=CartItem.objects.select_related('product'))
                     )
@@ -275,7 +282,7 @@ class CartViewSet(ModelViewSet):
         if user.is_authenticated:
             carts = queryset.filter(user=user)
         else:
-            carts = queryset.filter(session_key=self.request.session.session_key)
+            carts = queryset.filter(session_key=session_key)
 
         if not carts.exists():
             raise NotFound()
@@ -284,6 +291,24 @@ class CartViewSet(ModelViewSet):
     def paginate_queryset(self, queryset):
         if self.is_admin_or_manager():
             return super().paginate_queryset(queryset)
+    
+    def list(self, request, *args, **kwargs):
+        user = request.user
+        session_key = request.session.session_key
+
+        if user.is_authenticated:
+            # over queriyng with every request
+            has_anon_cart = Cart.objects.filter(session_key=session_key).first()
+            has_auth_cart = Cart.objects.filter(user=user).first()
+
+            if has_anon_cart and not has_auth_cart:
+                # Trigger the Celery task to change anon cart to auth cart asynchronously
+                change_anon_cart_to_auth_cart.delay(user.id, session_key)
+                
+            if has_anon_cart and has_auth_cart:
+                # Trigger the Celery task to transit anon cart items to auth cart asynchronously
+                transit_anon_cart_items_to_auth_cart_and_delete.delay(user.id, session_key)
+        return super().list(request, *args, **kwargs)
     
     def get_throttles(self):
         return base_throttle.get_throttles(self.request)
