@@ -1,10 +1,9 @@
-import hashlib
-from typing import Iterable
-from django.db import models
-from django.db import models
-from django.core.exceptions import ValidationError
-from django.core.validators import MinValueValidator
+from datetime import timedelta
 from django.conf import settings
+from django.core.validators import MinValueValidator
+from django.db import models
+from django.db import models
+from django.utils.timezone import now
 from uuid import uuid4
 
 
@@ -97,13 +96,19 @@ class Order(models.Model):
     
     customer = models.ForeignKey(Customer, on_delete=models.PROTECT, related_name='orders')
     datetime_created = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(default=(now() + timedelta(minutes=15)))
     status = models.CharField(max_length=255, choices=ORDER_STATUS, default=ORDER_STATUS_UNPAID)
 
     objects = models.Manager()
     unpaid_orders = UnpaidOrderManger()
 
     def __str__(self):
-        return f'Order id={self.id}'
+        return f'Order id: {self.id} | Customer: {self.customer}'
+    
+    @property
+    def is_expired(self):
+        if now() > self.expires_at:
+            return True
     
     @property
     def total_items_price(self):

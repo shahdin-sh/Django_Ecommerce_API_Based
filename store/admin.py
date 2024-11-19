@@ -1,8 +1,7 @@
-from django.contrib import admin
-
 from django.contrib import admin, messages
 from django.db.models import Count
 from django.urls import reverse
+from django.utils.timezone import now
 from django.utils.html import format_html
 from django.utils.http import urlencode
 
@@ -114,7 +113,7 @@ class AddressInline(admin.TabularInline):
 
 @admin.register(models.Order)
 class OrderAdmin(admin.ModelAdmin):
-    list_display = ['id', 'customer', 'status', 'datetime_created', 'num_of_items']
+    list_display = ['id', 'customer', 'status', 'datetime_created', 'num_of_items', 'expiration']
     list_editable = ['status']
     list_per_page = 10
     ordering = ['-datetime_created']
@@ -131,6 +130,20 @@ class OrderAdmin(admin.ModelAdmin):
     @admin.display(ordering='items_count', description='# items')
     def num_of_items(self, order):
         return order.items_count
+    
+    @admin.display(description='expired_in')
+    def expiration(self, order):
+        if order.status != 'paid':
+            if not order.is_expired:
+                remaining_time_in_sec = int((order.expires_at - now()).total_seconds())
+                remaining_time_in_min =  remaining_time_in_sec // 60
+                if remaining_time_in_min != 0:
+                    return f'{remaining_time_in_min} Minutes'
+                else:
+                    return f'{remaining_time_in_sec} Seconds' 
+            elif order.is_expired:
+                return 'Expired'
+        return 'Approved'
 
 admin.site.register(models.Category)
 

@@ -1,4 +1,6 @@
 from django.db import IntegrityError
+from django.utils.timezone import now
+
 from celery import shared_task
 
 from .models import Order, Product
@@ -41,3 +43,11 @@ def update_inventory(product_id:int, quantity:int, reduce: bool):
     
     except Exception as e:
         return f"Warning: Failed to update inventory due to {e}"
+
+@shared_task()
+def remove_expired_orders():
+    expired_orders = Order.objects.filter(expires_at__lt=now()).exclude(status__in=['paid'])
+    list_of_expired_orders = list(expired_orders)
+    expired_orders.delete()
+
+    return f'Deleted {list_of_expired_orders}'
