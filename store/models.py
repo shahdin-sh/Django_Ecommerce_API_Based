@@ -9,7 +9,7 @@ from uuid import uuid4
 
 class Category(models.Model):
     title = models.CharField(max_length=255)
-    slug = models.SlugField(unique=True)
+    slug = models.SlugField(unique=True, db_index=True)
     description = models.CharField(max_length=500, blank=True)
     top_product = models.ForeignKey('Product', on_delete=models.SET_NULL, blank=True, null=True, related_name='+')
 
@@ -46,6 +46,11 @@ class Product(models.Model):
     objects = models.Manager()
     active = ActiveProductManager()
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['name' ,'category', 'slug', 'unit_price', 'inventory'])
+        ]
+
     def __str__(self):
         return self.name
     
@@ -72,7 +77,7 @@ class Customer(models.Model):
 
 
 class Address(models.Model):
-    customer = models.OneToOneField(Customer, on_delete=models.CASCADE, primary_key=True, related_name='address')
+    customer = models.OneToOneField(Customer, on_delete=models.CASCADE, primary_key=True, related_name='address', db_index=True)
     province = models.CharField(max_length=255)
     city = models.CharField(max_length=255)
     street = models.CharField(max_length=255)
@@ -94,7 +99,7 @@ class Order(models.Model):
         (ORDER_STATUS_UNPAID,'Unpaid'),
     ]
     
-    customer = models.ForeignKey(Customer, on_delete=models.PROTECT, related_name='orders')
+    customer = models.ForeignKey(Customer, on_delete=models.PROTECT, related_name='orders', db_index=True)
     datetime_created = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField(default=(now() + timedelta(minutes=15)))
     status = models.CharField(max_length=255, choices=ORDER_STATUS, default=ORDER_STATUS_UNPAID)
@@ -128,7 +133,7 @@ class Order(models.Model):
     
 
 class OrderItem(models.Model):
-    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='items')
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='items', db_index=True)
     product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name='order_items')
     quantity = models.PositiveSmallIntegerField()
     unit_price = models.PositiveIntegerField()
@@ -175,9 +180,9 @@ class Comment(models.Model):
 
 
 class Cart(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid4)
+    id = models.UUIDField(primary_key=True, default=uuid4, db_index=True)
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, blank=True, null=True)
-    session_key = models.CharField(max_length=255, blank=True, null=True)
+    session_key = models.CharField(max_length=255, blank=True, null=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -194,7 +199,7 @@ class Cart(models.Model):
 
 
 class CartItem(models.Model):
-    cart = models.ForeignKey(Cart, on_delete=models.CASCADE, related_name='items')
+    cart = models.ForeignKey(Cart, on_delete=models.CASCADE, related_name='items', db_index=True)
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='cart_items')
     quantity = models.PositiveSmallIntegerField(validators=[MinValueValidator(1)])
 
