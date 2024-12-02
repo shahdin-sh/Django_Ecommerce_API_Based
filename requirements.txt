@@ -12,7 +12,7 @@ click-repl==0.3.0
 cron-descriptor==1.4.5
 cryptography==42.0.7
 defusedxml==0.8.0rc2
-Django==4.2.8
+Django==4.2.16
 django-bmemcached==0.3.0
 django-celery-beat==2.7.0
 django-cors-headers==4.5.0
