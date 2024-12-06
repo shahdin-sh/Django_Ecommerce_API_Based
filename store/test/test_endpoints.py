@@ -5,10 +5,10 @@ from rest_framework.test import APITestCase, APIClient
 from django.contrib.auth.models import Group
 from django.urls import resolve
 
-from store.test.helpers.base_helper import MockObjects, GenerateAuthToken
-from store.test.helpers.endpoints_access_helper import ApiEndpointsAccessHelper
+from test.helpers.base_helper import MockObjects, GenerateAuthToken
+from test.helpers.endpoints_access_helper import ApiEndpointsAccessHelper
 
-from store.views import (
+from ..views import (
     CategoryViewSet, 
     ProductViewSet, 
     CommentViewSet, 
@@ -17,7 +17,7 @@ from store.views import (
     CustomerViewSet,
     AddressViewSet,
     OrderViewSet,
-    PaymentProcess
+    PaymentProcessView,
 )
 
 
@@ -250,7 +250,7 @@ class PaymentUrlsTests(APITestCase):
     
     # Test Methods           
     def test_payment_url_resolves(self):
-        self.assertEqual(resolve(self.payment_url).func.cls, PaymentProcess)
+        self.assertEqual(resolve(self.payment_url).func.cls, PaymentProcessView)
     
     def test_payment_urls_access(self):
         url = self.payment_url

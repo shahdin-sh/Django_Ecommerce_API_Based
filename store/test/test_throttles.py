@@ -6,9 +6,9 @@ from django.contrib.auth.models import Group
 from django.conf import settings
 from rest_framework.exceptions import ValidationError
 
-from store.test.test_endpoints import MockObjects, GenerateAuthToken
-from store.test.helpers.base_helper import UserAuthHelper
-from store.throttle import BaseThrottleView
+from test.test_endpoints import MockObjects, GenerateAuthToken
+from test.helpers.base_helper import UserAuthHelper
+from throttle import BaseThrottleView
 
 
 class ThrottleValidationTests(APITestCase):

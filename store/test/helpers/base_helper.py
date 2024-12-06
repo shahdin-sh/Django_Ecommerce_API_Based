@@ -5,7 +5,7 @@ from rest_framework.test import APIClient
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, User
 
-from store.models import (
+from ...models import (
     Category,
     Product,
     Comment,

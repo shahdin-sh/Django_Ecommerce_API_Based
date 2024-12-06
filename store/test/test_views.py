@@ -8,8 +8,8 @@ from django.contrib.auth.models import Group
 from django.db.utils import IntegrityError
 from django.urls.exceptions import NoReverseMatch
 
-from store.models import Product, Category, Comment, Cart, CartItem, Customer, Address, Order, OrderItem
-from store.serializers import (
+from ..models import Product, Category, Comment, Cart, CartItem, Customer, Address, Order, OrderItem
+from ..serializers import (
     CartItemSerializer, 
     AddItemtoCartSerializer,
     ManagerAddressSerializer,
