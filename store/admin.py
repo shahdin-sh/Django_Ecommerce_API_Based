@@ -1,9 +1,9 @@
 from django.contrib import admin, messages
 from django.db.models import Count
 from django.urls import reverse
-from django.utils.timezone import now
 from django.utils.html import format_html
 from django.utils.http import urlencode
+from django.utils.timezone import now
 
 from . import models
 
@@ -87,6 +87,9 @@ class ProductAdmin(admin.ModelAdmin):
             f'{update_count} of products inventories cleared to zero.',
             messages.ERROR,
         )
+
+
+admin.site.register(models.Category)
     
 
 @admin.register(models.Comment)
@@ -98,15 +101,66 @@ class CommentAdmin(admin.ModelAdmin):
     autocomplete_fields = ['product', ]
 
 
-class OrderItemInline(admin.TabularInline):
-    model = models.OrderItem
-    fields = ['product', 'quantity', 'unit_price']
+@admin.register(models.Wishlist)
+class WishlistAdmin(admin.ModelAdmin):
+    list_display = ['user']
+    readonly_fields = ['user', 'products']
+    ordering = ['user__id']
+
+
+# Cart & CartItem inlince and registration
+class CartItemInline(admin.TabularInline):
+    model = models.CartItem
+    list_display = ['id', 'product', 'quantity']
     extra = 0
     min_num = 1
 
+    def get_queryset(self, request):
+        pass
+
+
+@admin.register(models.Cart)
+class CartAdmin(admin.ModelAdmin):
+    # cart obj just can be created by authenticated and anon users who send Post Requests.
+    list_display = ['id', 'user', 'session_key', 'created_at']
+    readonly_fields = ['id', 'created_at', 'user', 'session_key']
+    ordering = ['-created_at']
+    inlines = [CartItemInline]
+
+
+# Customer & Address inlince and registration
 class AddressInline(admin.TabularInline):
     model = models.Address
     fiedls  = ['province', 'street', 'city']
+    extra = 0
+    min_num = 1
+
+
+@admin.register(models.Customer)
+class CustomerAdmin(admin.ModelAdmin):
+    list_display = [ 'customer_username', 'email', 'phone_number', 'address']
+    list_per_page = 10
+    ordering = ['user__username']
+    search_fields = ['user__username']
+    inlines = [AddressInline]
+
+    def customer_username(self, obj):
+        return obj.user.username
+
+    def email(self, obj):
+        return obj.user.email
+    
+    def phone_number(self, obj):
+        return obj.user.phone_number
+    
+    def address(self, obj):
+        return obj.address.objects.all()
+
+
+# Order & OrderItem inlince and registration
+class OrderItemInline(admin.TabularInline):
+    model = models.OrderItem
+    fields = ['product', 'quantity', 'unit_price']
     extra = 0
     min_num = 1
 
@@ -133,40 +187,19 @@ class OrderAdmin(admin.ModelAdmin):
     
     @admin.display(description='expired_in')
     def expiration(self, order):
-        if order.status != 'paid':
-            if not order.is_expired:
-                remaining_time_in_sec = int((order.expires_at - now()).total_seconds())
-                remaining_time_in_min =  remaining_time_in_sec // 60
-                if remaining_time_in_min != 0:
-                    return f'{remaining_time_in_min} Minutes'
-                else:
-                    return f'{remaining_time_in_sec} Seconds' 
-            elif order.is_expired:
-                return 'Expired'
-        return 'Approved'
-
-admin.site.register(models.Category)
-
-
-@admin.register(models.Customer)
-class CustomerAdmin(admin.ModelAdmin):
-    list_display = [ 'customer_username', 'email', 'phone_number', 'address']
-    list_per_page = 10
-    ordering = ['user__username']
-    search_fields = ['user__username']
-    inlines = [AddressInline]
-
-    def customer_username(self, obj):
-        return obj.user.username
-
-    def email(self, obj):
-        return obj.user.email
-    
-    def phone_number(self, obj):
-        return obj.user.phone_number
-    
-    def address(self, obj):
-        return obj.address.objects.all()
+        if order.status == 'paid':
+            return 'Approved'
+        
+        # celery-beat has been scheduled to delete expired orders every 10 mins 
+        if order.is_expired:
+            return 'Expired'
+        
+        remaining_time_in_sec = int((order.expires_at - now()).total_seconds())
+        remaining_time_in_min =  remaining_time_in_sec // 60
+        if remaining_time_in_min == 0:
+            return f'{remaining_time_in_sec} Seconds' 
+        else:
+            return f'{remaining_time_in_min} Minutes'
 
 
 @admin.register(models.OrderItem)
@@ -175,31 +208,6 @@ class OrderItemAdmin(admin.ModelAdmin):
     autocomplete_fields = ['product', ]
 
 
-class CartItemInline(admin.TabularInline):
-    model = models.CartItem
-    list_display = ['id', 'product', 'quantity']
-    extra = 0
-    min_num = 1
-
-    def get_queryset(self, request):
-        pass
-
     
-@admin.register(models.Cart)
-class CartAdmin(admin.ModelAdmin):
-    # cart obj just can be created by authenticated and anon users who send Post Requests.
-    list_display = ['id', 'user', 'session_key', 'created_at']
-    readonly_fields = ['id', 'created_at', 'user', 'session_key']
-    ordering = ['-created_at']
-    inlines = [CartItemInline]
 
 
-@admin.register(models.Wishlist)
-class WishlistAdmin(admin.ModelAdmin):
-    list_display = ['user']
-    readonly_fields = ['user', 'products']
-    ordering = ['user__id']
-
-    # def has_add_permission(self, request):
-    #     # Disable the add button in the admin interface
-    #     return False

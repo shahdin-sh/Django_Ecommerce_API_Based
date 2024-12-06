@@ -101,7 +101,7 @@ class Order(models.Model):
     
     customer = models.ForeignKey(Customer, on_delete=models.PROTECT, related_name='orders', db_index=True)
     datetime_created = models.DateTimeField(auto_now_add=True)
-    expires_at = models.DateTimeField(default=(now() + timedelta(minutes=15)))
+    expires_at = models.DateTimeField(default=(now() + timedelta(minutes=15)), blank=True, null=True)
     status = models.CharField(max_length=255, choices=ORDER_STATUS, default=ORDER_STATUS_UNPAID)
 
     objects = models.Manager()

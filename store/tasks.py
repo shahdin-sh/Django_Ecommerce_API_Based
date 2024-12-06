@@ -20,6 +20,7 @@ def approve_order_status_after_successful_payment(self, order_id):
         # this if statement ensures that order wont save multiple times due to some unexcepted error
         if order_obj.status != 'paid':
             order_obj.status = 'paid'
+            order_obj.expires_at = None
             order_obj.save()
 
         return f"{CELERY_MESSAGES['successful']} order {order_id} for {order_obj.customer.user.username} approved."
@@ -54,7 +55,7 @@ def update_inventory(product_id:int, quantity:int, reduce: bool):
 
 @shared_task()
 def remove_expired_orders():
-    expired_orders = Order.objects.filter(expires_at__lt=now()).exclude(status__in=['paid'])
+    expired_orders = Order.objects.filter(expires_at__lt=now()).exclude(status='paid')
     list_of_expired_orders = list(expired_orders)
     expired_orders.delete()
 
